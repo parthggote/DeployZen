@@ -1,0 +1,6 @@
+FROM C:\Users\parth_gote\Downloads\autosuiteai-platform\data\models\model_1754649600286_m4wr3rcnu_brain_mri_model.onnx
+PARAMETER num_ctx 2048
+PARAMETER num_batch 32
+PARAMETER num_thread 4
+PARAMETER num_predict 128
+PARAMETER stream true
