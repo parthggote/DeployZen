@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 import fetch from 'node-fetch'
+// Fixed: Use onnxruntime-web instead of onnxruntime-node
 import * as ort from 'onnxruntime-web';
 
 // Global map to store ONNX inference sessions
@@ -262,17 +263,21 @@ async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
   }
 }
 
-// Deploy model using ONNX Runtime
+// Deploy model using ONNX Runtime Web
 async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
   try {
-    // Load the ONNX model
-    const session = await ort.InferenceSession.create(modelData.filePath);
+    // Note: In serverless environments like Vercel, you may need to handle ONNX models differently
+    // This example assumes the ONNX model file is accessible
+    const session = await ort.InferenceSession.create(modelData.filePath, {
+      executionProviders: ['wasm'], // Use WebAssembly provider for serverless compatibility
+    });
+    
     onnxSessions.set(modelData.id, session);
 
     modelData.status = "Running";
-    // Assign a fake process ID for now, as onnxruntime-node doesn't spawn a separate server process
-    modelData.processId = Date.now(); 
-    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully using onnxruntime-node.`);
+    modelData.processId = Date.now(); // Timestamp as process ID since onnxruntime-web doesn't spawn processes
+    
+    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully using onnxruntime-web.`);
     return true;
   } catch (error) {
     console.error("ONNX deployment error:", error);
