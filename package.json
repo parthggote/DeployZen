@@ -51,7 +51,7 @@
     "next": "15.2.4",
     "next-themes": "^0.3.0",
     "node-fetch": "^3.3.2",
-    "onnxruntime-node": "^1.16.0",
+    "onnxruntime-web": "^1.16.0",
     "react": "^18.3.1",
     "react-day-picker": "9.8.0",
     "react-dom": "^18.3.1",
