@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 import fetch from 'node-fetch'
-// Fixed: Use onnxruntime-web instead of onnxruntime-node
-import * as ort from 'onnxruntime-web';
+// Use onnxruntime-node for server-side inference
+import * as ort from 'onnxruntime-node';
 
 // Global map to store ONNX inference sessions
 const onnxSessions = new Map<string, ort.InferenceSession>();
@@ -269,7 +269,7 @@ async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
     // Note: In serverless environments like Vercel, you may need to handle ONNX models differently
     // This example assumes the ONNX model file is accessible
     const session = await ort.InferenceSession.create(modelData.filePath, {
-      executionProviders: ['wasm'], // Use WebAssembly provider for serverless compatibility
+      executionProviders: ['cpu'], // Use CPU provider for Node.js server-side execution
     });
     
     onnxSessions.set(modelData.id, session);

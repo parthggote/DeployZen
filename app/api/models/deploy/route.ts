@@ -281,7 +281,6 @@ async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
     return false;
   }
 }
-}
 
 // Deploy model using TorchServe (basic simulated deployment if runtime not available)
 async function deployWithTorch(modelData: ModelData): Promise<boolean> {
