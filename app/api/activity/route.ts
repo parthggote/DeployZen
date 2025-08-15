@@ -263,21 +263,35 @@ async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
   }
 }
 
-// Deploy model using ONNX Runtime Web
+// Deploy model using ONNX Runtime Node (CPU-only for Vercel compatibility)
 async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
   try {
-    // Note: In serverless environments like Vercel, you may need to handle ONNX models differently
-    // This example assumes the ONNX model file is accessible
+    // Check if we're in a Vercel-like serverless environment
+    const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+    
+    if (isServerless) {
+      // In serverless environments, we need to handle model loading differently
+      // Models should be pre-uploaded and accessible via file system or cloud storage
+      if (!modelData.filePath.startsWith('/tmp/') && !modelData.filePath.startsWith('./')) {
+        throw new Error("In serverless environments, ONNX models must be accessible locally or via cloud storage");
+      }
+    }
+
+    // Create ONNX session with CPU-only execution for Vercel compatibility
     const session = await ort.InferenceSession.create(modelData.filePath, {
-      executionProviders: ['cpu'], // Use CPU provider for Node.js server-side execution
+      executionProviders: ['cpu'], // Use CPU provider for Vercel serverless compatibility
+      graphOptimizationLevel: 'all', // Enable optimizations for CPU inference
+      executionMode: 'sequential', // Sequential execution for serverless environments
+      enableCpuMemArena: true, // Enable CPU memory arena for better performance
+      enableMemPattern: true, // Enable memory pattern optimization
     });
     
     onnxSessions.set(modelData.id, session);
 
     modelData.status = "Running";
-    modelData.processId = Date.now(); // Timestamp as process ID since onnxruntime-web doesn't spawn processes
+    modelData.processId = Date.now(); // Timestamp as process ID since onnxruntime-node doesn't spawn processes
     
-    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully using onnxruntime-web.`);
+    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully using onnxruntime-node CPU runtime.`);
     return true;
   } catch (error) {
     console.error("ONNX deployment error:", error);
