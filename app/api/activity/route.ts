@@ -94,7 +94,7 @@ export function getOnnxSession(modelId: string): any | undefined {
   return onnxSessions.get(modelId);
 }
 
-// Real model deployment using Ollama or llama.cpp
+// Real model deployment using Ollama or llama.cpp (kept lightweight; activity mirrors models APIs)
 async function deployModel(modelData: ModelData): Promise<boolean> {
   try {
     if (modelData.mode === "ollama") {
