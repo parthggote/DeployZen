@@ -1,0 +1,27 @@
+{
+  "name": "generate-tests-api-test-suite",
+  "version": "1.0.0",
+  "description": "Comprehensive API test suite for the /api/apis/generate-tests endpoint",
+  "main": "comprehensive_generate_tests_api_test.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "api",
+    "test",
+    "jest",
+    "endpoint",
+    "generate-tests"
+  ],
+  "author": "DeployZen Testing Team",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "node-fetch": "^3.0.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.0.0"
+  }
+}

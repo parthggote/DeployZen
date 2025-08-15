@@ -1,6 +1,61 @@
 import { NextRequest, NextResponse } from "next/server"
-import { handleSecurityAnalysis } from "../[[...rest]]/route"
+import fs from "fs"
+import path from "path"
+
+const RUNTIME_DATA_ROOT = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data')
+const DATA_DIR = RUNTIME_DATA_ROOT
+const APIS_FILE = path.join(DATA_DIR, "apis.json")
+const APIS_DIR = path.join(DATA_DIR, "apis")
+
+function ensureDirectories() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+    if (!fs.existsSync(APIS_DIR)) fs.mkdirSync(APIS_DIR, { recursive: true })
+  } catch {}
+}
+
+function loadApis(): any[] {
+  try {
+    ensureDirectories()
+    if (fs.existsSync(APIS_FILE)) {
+      return JSON.parse(fs.readFileSync(APIS_FILE, "utf8"))
+    }
+  } catch {}
+  return []
+}
+
+async function getSecurityAnalysis(apiContent: string): Promise<string> {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ""
+  const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+  if (!GEMINI_API_KEY) return "No security analysis available."
+  const prompt = `Analyze the following API code for security vulnerabilities, best practices, and potential issues. List any problems and suggest improvements.\n\nAPI Code:\n${apiContent}`
+  try {
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+      })
+    })
+    if (!response.ok) return "No security analysis available."
+    const data = await response.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No security analysis available."
+  } catch {
+    return "No security analysis available."
+  }
+}
 
 export async function POST(req: NextRequest) {
-  return handleSecurityAnalysis(req)
+  try {
+    const { apiId } = await req.json()
+    const apis = loadApis()
+    const api = apis.find((a: any) => a.id === apiId)
+    if (!api || !api.filePath || !fs.existsSync(api.filePath)) return NextResponse.json({ success: false, error: "API file not found" }, { status: 404 })
+    const content = fs.readFileSync(api.filePath, 'utf8')
+    const analysis = await getSecurityAnalysis(content)
+    return NextResponse.json({ success: true, securityAnalysis: analysis })
+  } catch {
+    return NextResponse.json({ success: false }, { status: 500 })
+  }
 }
