@@ -9,8 +9,18 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Do not bundle native addons; we avoid node binding on Vercel by using onnxruntime-web
+  // Keep serverless bundles small
   serverExternalPackages: [],
+  outputFileTracingExcludes: {
+    "**/*": [
+      "data/**",
+      "**/*.onnx",
+      "**/*.bin",
+      "**/*.gguf",
+      "**/*.pth",
+      "**/*.pt"
+    ]
+  },
   async rewrites() {
     const base = process.env.NEXT_PUBLIC_API_BASE_URL
     if (!base) return []

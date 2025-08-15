@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "app/api/**/route.(js|mjs|ts)": {
+      "excludeFiles": [
+        "data/**",
+        "**/*.onnx",
+        "**/*.bin",
+        "**/*.gguf",
+        "**/*.pth",
+        "**/*.pt"
+      ]
+    }
+  }
+}
+
+
