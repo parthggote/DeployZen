@@ -154,10 +154,21 @@ export async function POST(req: NextRequest, { params }: { params: { rest?: stri
     apis.push(record)
     saveApis(apis)
     logActivity(`Uploaded API '${apiFile.name}' (${apiFile.size} bytes)${description ? ` - ${description}` : ''}`)
-    return NextResponse.json({ success: true, apiId, message: "API uploaded successfully", securityAnalysis })
+    return NextResponse.json({ success: true, apiId, message: "API uploaded successfully", securityAnalysis }, { headers: { 'Access-Control-Allow-Origin': '*' } })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e?.message || "Upload failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: e?.message || "Upload failed" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } })
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS,DELETE',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  })
 }
 
 async function handleSecurityAnalysis(req: NextRequest) {
@@ -202,9 +213,9 @@ async function handleGenerateTests(req: NextRequest) {
     api.lastTested = new Date().toISOString()
     saveApis(apis)
     logActivity(`Generated ${testCases.length} test cases for API '${api.name}'`)
-    return NextResponse.json({ success: true, testCases, message: `Generated ${testCases.length} test cases` })
+    return NextResponse.json({ success: true, testCases, message: `Generated ${testCases.length} test cases` }, { headers: { 'Access-Control-Allow-Origin': '*' } })
   } catch (e) {
-    return NextResponse.json({ success: false, error: "Failed to generate test cases" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Failed to generate test cases" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } })
   }
 }
 
@@ -237,9 +248,9 @@ async function handleExecuteTests(req: NextRequest) {
     api.failedTests = failed
     saveApis(apis)
     logActivity(`Executed ${executed.length} tests for API '${api.name}' (${passed} passed, ${failed} failed)`) 
-    return NextResponse.json({ success: true, results: executed, summary: { total: executed.length, passed, failed, successRate: (passed / executed.length) * 100 }, message: `Executed ${executed.length} tests` })
+    return NextResponse.json({ success: true, results: executed, summary: { total: executed.length, passed, failed, successRate: (passed / executed.length) * 100 }, message: `Executed ${executed.length} tests` }, { headers: { 'Access-Control-Allow-Origin': '*' } })
   } catch (e) {
-    return NextResponse.json({ success: false, error: "Failed to execute tests" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Failed to execute tests" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } })
   }
 }
 
