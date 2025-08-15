@@ -1,14 +1,13 @@
 {
   "functions": {
-    "app/api/**/route.(js|mjs|ts)": {
-      "excludeFiles": [
-        "data/**",
-        "**/*.onnx",
-        "**/*.bin",
-        "**/*.gguf",
-        "**/*.pth",
-        "**/*.pt"
-      ]
+    "app/api/**/route.ts": {
+      "excludeFiles": "{data/**,**/*.onnx,**/*.bin,**/*.gguf,**/*.pth,**/*.pt}"
+    },
+    "app/api/**/route.js": {
+      "excludeFiles": "{data/**,**/*.onnx,**/*.bin,**/*.gguf,**/*.pth,**/*.pt}"
+    },
+    "app/api/**/route.mjs": {
+      "excludeFiles": "{data/**,**/*.onnx,**/*.bin,**/*.gguf,**/*.pth,**/*.pt}"
     }
   }
 }
