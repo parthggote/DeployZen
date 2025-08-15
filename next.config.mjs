@@ -9,12 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Externalize onnxruntime-node CPU package from server bundles
-  serverExternalPackages: ['onnxruntime-node'],
-  // Ensure proper handling of native addons in Vercel environment
-  experimental: {
-    serverComponentsExternalPackages: ['onnxruntime-node']
-  },
+  // Do not bundle native addons; we avoid node binding on Vercel by using onnxruntime-web
+  serverExternalPackages: [],
   async rewrites() {
     const base = process.env.NEXT_PUBLIC_API_BASE_URL
     if (!base) return []

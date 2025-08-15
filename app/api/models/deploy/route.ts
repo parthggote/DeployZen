@@ -2,10 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 import fetch from 'node-fetch'
-import * as ort from 'onnxruntime-node';
 
 // Global map to store ONNX inference sessions
-const onnxSessions = new Map<string, ort.InferenceSession>();
+const onnxSessions = new Map<string, any>();
 
 const DATA_DIR = path.join(process.cwd(), "data")
 const MODELS_FILE = path.join(DATA_DIR, "models.json")
@@ -89,7 +88,7 @@ function getAvailablePort(startPort = 11434): number {
 }
 
 // Function to retrieve ONNX session by model ID
-export function getOnnxSession(modelId: string): ort.InferenceSession | undefined {
+export function getOnnxSession(modelId: string): any | undefined {
   return onnxSessions.get(modelId);
 }
 
@@ -262,17 +261,43 @@ async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
   }
 }
 
-// Deploy model using ONNX Runtime
+// Deploy model using ONNX Runtime (web on Vercel, node locally)
 async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
   try {
-    // Load the ONNX model
-    const session = await ort.InferenceSession.create(modelData.filePath);
+    // Check if we're in a Vercel-like serverless environment
+    const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+
+    // In serverless environments, models must be accessible locally (e.g., /tmp) or via cloud storage
+    if (isServerless) {
+      if (!modelData.filePath.startsWith('/tmp/') && !modelData.filePath.startsWith('./')) {
+        throw new Error('In serverless environments, ONNX models must be accessible locally or via cloud storage');
+      }
+    }
+
+    // Dynamically import the correct ONNX runtime
+    let ort: any
+    if (isServerless) {
+      ort = await import('onnxruntime-web')
+    } else {
+      try {
+        ort = await import('onnxruntime-node')
+      } catch (_e) {
+        ort = await import('onnxruntime-web')
+      }
+    }
+
+    // Create session with appropriate provider
+    const sessionOptions: any = isServerless
+      ? { executionProviders: ['wasm'] }
+      : { executionProviders: ['cpu'] }
+
+    const session = await ort.InferenceSession.create(modelData.filePath, sessionOptions);
     onnxSessions.set(modelData.id, session);
 
     modelData.status = "Running";
-    // Assign a fake process ID for now, as onnxruntime-node doesn't spawn a separate server process
+    // Assign a fake process ID for now, as ONNX runtimes don't spawn separate processes
     modelData.processId = Date.now(); 
-    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully using onnxruntime-node.`);
+    logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully.`);
     return true;
   } catch (error) {
     console.error("ONNX deployment error:", error);

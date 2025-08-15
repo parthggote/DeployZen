@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 import fetch from 'node-fetch'
-// Use onnxruntime-node for server-side inference
-import * as ort from 'onnxruntime-node';
+// Dynamic ONNX import: use onnxruntime-web on Vercel, try onnxruntime-node locally
+// We avoid importing onnxruntime-node at build time to stay compatible with Vercel
 
 // Global map to store ONNX inference sessions
-const onnxSessions = new Map<string, ort.InferenceSession>();
+const onnxSessions = new Map<string, any>();
 
 const DATA_DIR = path.join(process.cwd(), "data")
 const MODELS_FILE = path.join(DATA_DIR, "models.json")
@@ -90,7 +90,7 @@ function getAvailablePort(startPort = 11434): number {
 }
 
 // Function to retrieve ONNX session by model ID
-export function getOnnxSession(modelId: string): ort.InferenceSession | undefined {
+export function getOnnxSession(modelId: string): any | undefined {
   return onnxSessions.get(modelId);
 }
 
@@ -263,7 +263,7 @@ async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
   }
 }
 
-// Deploy model using ONNX Runtime Node (CPU-only for Vercel compatibility)
+// Deploy model using ONNX Runtime (web on Vercel, node locally)
 async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
   try {
     // Check if we're in a Vercel-like serverless environment
@@ -277,14 +277,33 @@ async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
       }
     }
 
-    // Create ONNX session with CPU-only execution for Vercel compatibility
-    const session = await ort.InferenceSession.create(modelData.filePath, {
-      executionProviders: ['cpu'], // Use CPU provider for Vercel serverless compatibility
-      graphOptimizationLevel: 'all', // Enable optimizations for CPU inference
-      executionMode: 'sequential', // Sequential execution for serverless environments
-      enableCpuMemArena: true, // Enable CPU memory arena for better performance
-      enableMemPattern: true, // Enable memory pattern optimization
-    });
+    // Dynamically import the correct ONNX runtime
+    let ort: any
+    if (isServerless) {
+      ort = await import('onnxruntime-web')
+    } else {
+      try {
+        ort = await import('onnxruntime-node')
+      } catch (_e) {
+        // Fallback to web runtime if node binding is unavailable
+        ort = await import('onnxruntime-web')
+      }
+    }
+
+    // Create ONNX session with appropriate execution provider
+    const sessionOptions: any = isServerless
+      ? {
+          executionProviders: ['wasm'],
+        }
+      : {
+          executionProviders: ['cpu'],
+          graphOptimizationLevel: 'all',
+          executionMode: 'sequential',
+          enableCpuMemArena: true,
+          enableMemPattern: true,
+        }
+
+    const session = await ort.InferenceSession.create(modelData.filePath, sessionOptions);
     
     onnxSessions.set(modelData.id, session);
 
