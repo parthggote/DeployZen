@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 
-const DATA_DIR = path.join(process.cwd(), "data")
+const RUNTIME_DATA_ROOT = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data')
+const DATA_DIR = RUNTIME_DATA_ROOT
 const APIS_FILE = path.join(DATA_DIR, "apis.json")
 const APIS_DIR = path.join(DATA_DIR, "apis")
 const ACTIVITY_LOG = path.join(DATA_DIR, "activity-log.md")
 
 function ensureDirectories() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-  if (!fs.existsSync(APIS_DIR)) fs.mkdirSync(APIS_DIR, { recursive: true })
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+    if (!fs.existsSync(APIS_DIR)) fs.mkdirSync(APIS_DIR, { recursive: true })
+  } catch {}
 }
 
 interface TestCase {
@@ -48,9 +51,7 @@ function loadApis(): ApiData[] {
     if (fs.existsSync(APIS_FILE)) {
       return JSON.parse(fs.readFileSync(APIS_FILE, "utf8"))
     }
-  } catch {
-    // noop
-  }
+  } catch {}
   return []
 }
 
@@ -58,15 +59,13 @@ function saveApis(apis: ApiData[]) {
   try {
     ensureDirectories()
     fs.writeFileSync(APIS_FILE, JSON.stringify(apis, null, 2))
-  } catch {
-    // noop
-  }
+  } catch {}
 }
 
 function logActivity(message: string) {
   const ts = new Date().toISOString()
   const entry = `## ${ts}\n- Feature: APIs\n- Summary: ${message}\n\n`
-  try { fs.appendFileSync(ACTIVITY_LOG, entry) } catch {}
+  try { ensureDirectories(); fs.appendFileSync(ACTIVITY_LOG, entry) } catch {}
 }
 
 async function getSecurityAnalysis(apiContent: string): Promise<string> {
@@ -93,7 +92,6 @@ async function getSecurityAnalysis(apiContent: string): Promise<string> {
 
 export async function GET(req: NextRequest, { params }: { params: { rest?: string[] } }) {
   const rest = params.rest || []
-  // /api/apis
   if (rest.length === 0) {
     try {
       const apis = loadApis()
@@ -108,7 +106,6 @@ export async function GET(req: NextRequest, { params }: { params: { rest?: strin
 export async function POST(req: NextRequest, { params }: { params: { rest?: string[] } }) {
   const rest = params.rest || []
 
-  // Dispatch by sub-path
   if (rest[0] === 'generate-tests') {
     return handleGenerateTests(req)
   }
@@ -119,7 +116,6 @@ export async function POST(req: NextRequest, { params }: { params: { rest?: stri
     return handleSecurityAnalysis(req)
   }
 
-  // POST /api/apis (upload API)
   try {
     const formData = await req.formData()
     const apiFile = formData.get("apiFile") as File
@@ -130,11 +126,13 @@ export async function POST(req: NextRequest, { params }: { params: { rest?: stri
     const apiId = `api_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const fileName = `${apiId}_${apiFile.name}`
     const filePath = path.join(APIS_DIR, fileName)
-    const buffer = Buffer.from(await apiFile.arrayBuffer())
+
+    const ab = await apiFile.arrayBuffer()
+    const buffer = Buffer.from(ab)
     fs.writeFileSync(filePath, buffer)
 
     let apiContent = ""
-    try { apiContent = Buffer.from(await apiFile.arrayBuffer()).toString("utf8") } catch {}
+    try { apiContent = buffer.toString("utf8") } catch {}
     const securityAnalysis = apiContent ? await getSecurityAnalysis(apiContent) : "No security analysis available."
 
     const apis = loadApis()
@@ -157,8 +155,8 @@ export async function POST(req: NextRequest, { params }: { params: { rest?: stri
     saveApis(apis)
     logActivity(`Uploaded API '${apiFile.name}' (${apiFile.size} bytes)${description ? ` - ${description}` : ''}`)
     return NextResponse.json({ success: true, apiId, message: "API uploaded successfully", securityAnalysis })
-  } catch (e) {
-    return NextResponse.json({ success: false, error: "Upload failed" }, { status: 500 })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e?.message || "Upload failed" }, { status: 500 })
   }
 }
 
@@ -187,7 +185,6 @@ async function handleGenerateTests(req: NextRequest) {
     let content = ""
     try { content = fs.readFileSync(api.filePath, 'utf8') } catch { content = "// API file content could not be read" }
 
-    // Minimal deterministic fallback test set
     const testCases: TestCase[] = Array.from({ length: 5 }).map((_, i) => ({
       id: `test_${Date.now()}_${i+1}`,
       name: `Generated Test ${i+1}`,
