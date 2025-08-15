@@ -171,7 +171,7 @@ export async function OPTIONS() {
   })
 }
 
-async function handleSecurityAnalysis(req: NextRequest) {
+export async function handleSecurityAnalysis(req: NextRequest) {
   try {
     const { apiId } = await req.json()
     const apis = loadApis() as any[]
@@ -185,7 +185,7 @@ async function handleSecurityAnalysis(req: NextRequest) {
   }
 }
 
-async function handleGenerateTests(req: NextRequest) {
+export async function handleGenerateTests(req: NextRequest) {
   try {
     const { apiId } = await req.json()
     if (!apiId) return NextResponse.json({ success: false, error: "API ID is required" }, { status: 400 })
@@ -495,7 +495,7 @@ function generateBasicTestCode(endpoint: {method: string, path: string}, isSucce
   }
 }
 
-async function handleExecuteTests(req: NextRequest) {
+export async function handleExecuteTests(req: NextRequest) {
   try {
     const { apiId, testIds } = await req.json()
     if (!apiId) return NextResponse.json({ success: false, error: "API ID is required" }, { status: 400 })
