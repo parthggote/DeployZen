@@ -3,6 +3,7 @@ import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import fs from "fs"
 import path from "path"
+import { getHuggingFaceInferenceEndpoint } from "@/lib/huggingface"
 
 const DATA_DIR = path.join(process.cwd(), "data")
 const MODELS_DIR = path.join(DATA_DIR, "models")
@@ -34,7 +35,24 @@ export async function GET(req: NextRequest, { params }: { params: { rest?: strin
   try {
     if (rest.length === 0) {
       const models = await db.collection("models").find({}).toArray()
-      const modelsWithId = models.map(m => ({ ...m, id: m._id.toString() }))
+
+      const modelUpdates = models.map(async (model) => {
+        if (model.mode === 'huggingface' && model.huggingFaceEndpointName && model.status !== 'Running' && model.status !== 'Failed') {
+          try {
+            const hfEndpoint = await getHuggingFaceInferenceEndpoint(model.huggingFaceEndpointName);
+            if (hfEndpoint && hfEndpoint.status !== model.status) {
+              await db.collection("models").updateOne({ _id: model._id }, { $set: { status: hfEndpoint.status, huggingFaceEndpointUrl: hfEndpoint.url } });
+              return { ...model, status: hfEndpoint.status, huggingFaceEndpointUrl: hfEndpoint.url };
+            }
+          } catch (error) {
+            console.error(`Failed to update status for HF model ${model.modelName}:`, error);
+          }
+        }
+        return model;
+      });
+      const updatedModels = await Promise.all(modelUpdates);
+
+      const modelsWithId = updatedModels.map(m => ({ ...m, id: m._id.toString() }))
       return NextResponse.json({ success: true, models: modelsWithId })
     }
 
@@ -69,9 +87,6 @@ export async function GET(req: NextRequest, { params }: { params: { rest?: strin
 }
 
 export async function POST(req: NextRequest, { params }: { params: { rest?: string[] } }) {
-    // This POST handler seems to be for uploading a new API, which is handled by the /api/activity route now.
-    // The logic here is mostly redundant or incorrect.
-    // I will remove the logic and return an error, pointing to the correct endpoint.
     return NextResponse.json({ success: false, error: "This endpoint is deprecated. Use /api/activity for model deployment." }, { status: 400 })
 }
 
@@ -91,7 +106,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { rest?: s
       return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
     }
 
-    // Delete the model file if it exists locally
     if (model.filePath && !model.filePath.startsWith('http') && fs.existsSync(model.filePath)) {
       try {
         fs.unlinkSync(model.filePath)

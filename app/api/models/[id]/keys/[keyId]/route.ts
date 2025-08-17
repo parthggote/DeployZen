@@ -32,16 +32,22 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
         return NextResponse.json({ success: false, error: "Model not found" }, { status: 404 });
     }
 
-    const result = await db.collection("api_keys").findOneAndUpdate(
-        { _id: new ObjectId(keyId), modelId: new ObjectId(modelId) },
-        { $set: { revokedAt: new Date().toISOString() } }
-    );
-
-    if (!result) {
+    const keyToRevoke = await db.collection("api_keys").findOne({ _id: new ObjectId(keyId), modelId: new ObjectId(modelId) });
+    if (!keyToRevoke) {
         return NextResponse.json({ success: false, error: "Key not found" }, { status: 404 });
     }
 
-    await logActivity(`Revoked API key (prefix ${result.prefix}) for model "${model.modelName}"`);
+    const result = await db.collection("api_keys").updateOne(
+        { _id: new ObjectId(keyId) },
+        { $set: { revokedAt: new Date().toISOString() } }
+    );
+
+    if (result.modifiedCount === 0 && !keyToRevoke.revokedAt) {
+      // If no document was modified and it wasn't already revoked, something went wrong.
+      return NextResponse.json({ success: false, error: "Failed to revoke key" }, { status: 500 });
+    }
+
+    await logActivity(`Revoked API key (prefix ${keyToRevoke.prefix}) for model "${model.modelName}"`);
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

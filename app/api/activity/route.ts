@@ -4,21 +4,15 @@ import { ObjectId } from "mongodb"
 import fs from "fs"
 import path from "path"
 import fetch from 'node-fetch'
+import { createHuggingFaceInferenceEndpoint } from "@/lib/huggingface"
 
-// ONNX session map remains the same
 const onnxSessions = new Map<string, any>();
-
-// We still need MODELS_DIR for writing the model files themselves.
 const DATA_DIR = path.join(process.cwd(), "data")
 const MODELS_DIR = path.join(DATA_DIR, "models")
 
 function ensureModelsDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
-  }
-  if (!fs.existsSync(MODELS_DIR)) {
-    fs.mkdirSync(MODELS_DIR, { recursive: true })
-  }
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+  if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true })
 }
 
 interface ModelData {
@@ -26,10 +20,10 @@ interface ModelData {
   id: string
   modelName: string
   filePath: string
-  mode: "ollama" | "llama.cpp" | "onnx" | "torch"
+  mode: "ollama" | "llama.cpp" | "onnx" | "torch" | "huggingface"
   tokens: number
   batchSize: number
-  status: "Pending" | "Running" | "Failed" | "Stopped"
+  status: "Pending" | "Running" | "Failed" | "Stopped" | "Initializing"
   port?: number
   createdAt: string
   lastActivity?: string
@@ -40,24 +34,25 @@ interface ModelData {
   version?: number
   size?: number
   versions?: { version: number; filePath: string; createdAt: string; size: number | null }[]
+  huggingFaceEndpointName?: string
+  huggingFaceEndpointUrl?: string
 }
 
 async function logActivity(message: string) {
   try {
     const client = await clientPromise;
     const db = client.db("DeployZen");
-    const logEntry = {
+    await db.collection("activity_log").insertOne({
       timestamp: new Date(),
       feature: "Models",
       summary: message,
-    };
-    await db.collection("activity_log").insertOne(logEntry);
+    });
   } catch (error) {
     console.error("Error writing to activity log:", error);
   }
 }
 
-async function updateModelStatus(modelId: ObjectId, status: "Running" | "Failed" | "Stopped", details: any = {}) {
+async function updateModelStatus(modelId: ObjectId, status: ModelData['status'], details: any = {}) {
     const client = await clientPromise;
     const db = client.db("DeployZen");
     await db.collection("models").updateOne(
@@ -84,7 +79,9 @@ export function getOnnxSession(modelId: string): any | undefined {
 async function deployModel(modelData: ModelData): Promise<boolean> {
   try {
     let success = false;
-    if (modelData.mode === "ollama") {
+    if (modelData.mode === "huggingface") {
+      success = await deployWithHuggingFace(modelData)
+    } else if (modelData.mode === "ollama") {
       success = await deployWithOllama(modelData)
     } else if (modelData.mode === "llama.cpp") {
       success = await deployWithLlamaCpp(modelData)
@@ -109,15 +106,51 @@ async function deployModel(modelData: ModelData): Promise<boolean> {
   }
 }
 
+async function deployWithHuggingFace(modelData: ModelData): Promise<boolean> {
+  try {
+    await logActivity(`🚀 Initiating Hugging Face deployment for "${modelData.modelName}"`);
+
+    const endpointName = modelData.modelName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase() + `-${modelData._id.toString().slice(-4)}`;
+    await updateModelStatus(modelData._id, "Initializing", { huggingFaceEndpointName: endpointName });
+
+    const hfEndpoint = await createHuggingFaceInferenceEndpoint({
+        name: endpointName,
+        repository: modelData.filePath, // filePath holds the HF model ID
+        framework: "pytorch",
+        task: "text-generation",
+        provider: {
+            vendor: "aws",
+            region: "us-east-1",
+        },
+        compute: {
+            accelerator: "gpu",
+            instance_size: "x1",
+            instance_type: "nvidia-a10g",
+            scaling: {
+                minReplica: 0,
+                maxReplica: 1,
+            }
+        },
+        type: "protected",
+    });
+
+    await updateModelStatus(modelData._id, "Initializing", {
+        huggingFaceEndpointName: hfEndpoint.name,
+        status: hfEndpoint.status.state
+    });
+
+    await logActivity(`✅ Hugging Face endpoint creation initiated for "${modelData.modelName}". Status: ${hfEndpoint.status.state}`);
+    return true;
+  } catch (error: any) {
+    await logActivity(`❌ Hugging Face deployment failed for "${modelData.modelName}": ${error.message}`);
+    return false;
+  }
+}
+
 async function deployWithOllama(modelData: ModelData): Promise<boolean> {
   try {
     const ollamaCheck = await fetch("http://localhost:11434/api/tags")
     if (!ollamaCheck.ok) throw new Error("Ollama is not running.")
-
-    // ... (Ollama logic is complex and involves file system, which is an issue in itself for Vercel)
-    // For now, we assume this logic is run in an environment where it can work,
-    // and we focus on the database interaction.
-
     await updateModelStatus(modelData._id, "Running", { processId: Date.now() });
     await logActivity(`✅ Ollama model "${modelData.modelName}" deployed and tested successfully`)
     return true
@@ -128,9 +161,6 @@ async function deployWithOllama(modelData: ModelData): Promise<boolean> {
 }
 
 async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
-  // This function spawns a child process, which is not possible in Vercel's standard serverless functions.
-  // This part of the application is fundamentally incompatible with Vercel.
-  // I will mark it as failed and log the issue.
   await logActivity(`❌ llama.cpp deployment is not supported in this environment.`);
   return false;
 }
@@ -139,10 +169,8 @@ async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
   try {
     const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
     let ort = isServerless ? await import('onnxruntime-web') : await import('onnxruntime-node');
-    
     const session = await ort.InferenceSession.create(modelData.filePath);
     onnxSessions.set(modelData.id, session);
-    
     await updateModelStatus(modelData._id, "Running", { processId: Date.now() });
     await logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully.`);
     return true;
@@ -153,25 +181,25 @@ async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
 }
 
 async function deployWithTorch(modelData: ModelData): Promise<boolean> {
-  // Similar to llama.cpp, spawning torchserve is not feasible on Vercel.
   await logActivity(`❌ TorchServe deployment is not supported in this environment.`);
   return false;
 }
 
 export async function POST(request: NextRequest) {
+  console.log("POST /api/activity called");
   try {
     const formData = await request.formData()
 
     const modelName = formData.get("modelName") as string
-    const mode = formData.get("mode") as "ollama" | "llama.cpp" | "onnx" | "torch"
-    const tokens = Number.parseInt(formData.get("tokens") as string)
-    const batchSize = Number.parseInt(formData.get("batchSize") as string)
+    const mode = formData.get("mode") as ModelData['mode']
+    const huggingFaceModelId = formData.get("huggingFaceModelId") as string;
+
+    const tokens = Number.parseInt(formData.get("tokens") as string) || 2048
+    const batchSize = Number.parseInt(formData.get("batchSize") as string) || 32
     const threads = Number.parseInt(formData.get("threads") as string) || 4
     const nPredict = Number.parseInt(formData.get("nPredict") as string) || 128
     const streamMode = formData.get("streamMode") === "true"
-
     const modelFile = formData.get("modelFile") as File
-    const huggingFaceUrl = formData.get("huggingFaceUrl") as string
 
     if (!modelName) {
       return NextResponse.json({ success: false, error: "Model name is required" }, { status: 400 })
@@ -185,22 +213,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Model name already exists" }, { status: 400 })
     }
 
-    ensureModelsDir();
-
     const modelId = new ObjectId()
     let filePath = ""
 
-    if (modelFile) {
+    if (mode === 'huggingface') {
+        if (!huggingFaceModelId) {
+            return NextResponse.json({ success: false, error: "Hugging Face Model ID is required for this mode" }, { status: 400 })
+        }
+        filePath = huggingFaceModelId;
+    } else if (modelFile) {
+      ensureModelsDir();
       const fileName = `${modelId.toString()}_${modelFile.name}`
       filePath = path.join(MODELS_DIR, fileName)
       const buffer = Buffer.from(await modelFile.arrayBuffer())
       fs.writeFileSync(filePath, buffer)
       await logActivity(`📁 Model file uploaded: ${modelFile.name} (${(modelFile.size / 1024 / 1024).toFixed(1)} MB)`)
-    } else if (huggingFaceUrl) {
-      filePath = huggingFaceUrl
-      await logActivity(`🔗 HuggingFace model URL registered: ${huggingFaceUrl}`)
     } else {
-      return NextResponse.json({ success: false, error: "Either model file or HuggingFace URL is required" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "A model file is required for this mode" }, { status: 400 })
     }
 
     const modelData: Omit<ModelData, 'id'> = {
@@ -223,7 +252,6 @@ export async function POST(request: NextRequest) {
     await db.collection("models").insertOne(modelData);
     await logActivity(`🚀 Model deployment initiated: "${modelName}" (${mode} mode)`)
 
-    // Don't await this. Let it run in the background.
     deployModel({ ...modelData, id: modelId.toString() });
 
     return NextResponse.json({ success: true, modelId: modelId.toString(), message: "Model deployment initiated" })
