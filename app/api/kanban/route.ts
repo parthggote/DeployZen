@@ -1,58 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
-import fs from "fs"
-import path from "path"
+import clientPromise from "@/lib/mongodb"
 
-const DATA_DIR = path.join(process.cwd(), "data")
-const KANBAN_FILE = path.join(DATA_DIR, "kanban.json")
-const MODELS_FILE = path.join(DATA_DIR, "models.json")
-const ACTIVITY_LOG = path.join(process.cwd(), "data", "activity-log.md")
-
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-  if (!fs.existsSync(KANBAN_FILE)) fs.writeFileSync(KANBAN_FILE, JSON.stringify([]))
-  if (!fs.existsSync(MODELS_FILE)) fs.writeFileSync(MODELS_FILE, JSON.stringify([]))
-}
-
-function readKanban() {
-  ensureDataFile()
-  try {
-    return JSON.parse(fs.readFileSync(KANBAN_FILE, "utf8"))
-  } catch (e) {
-    return []
-  }
-}
-
-function readModels() {
-  ensureDataFile()
-  try {
-    return JSON.parse(fs.readFileSync(MODELS_FILE, "utf8"))
-  } catch (e) {
-    return []
-  }
-}
-
-function writeKanban(data: any) {
-  ensureDataFile()
-  fs.writeFileSync(KANBAN_FILE, JSON.stringify(data, null, 2))
-}
-
-function logActivity(message: string) {
+// The file-based activity log is commented out as it's not suitable for a serverless environment.
+// A database-based logging mechanism should be implemented in the future.
+/*
+async function logActivity(message: string) {
+  const fs = require('fs');
+  const path = require('path');
+  const ACTIVITY_LOG = path.join(process.cwd(), "data", "activity-log.md")
   const timestamp = new Date().toISOString()
   const logEntry = `## ${timestamp}\n- Feature: Kanban\n- Summary: ${message}\n\n`
   fs.appendFileSync(ACTIVITY_LOG, logEntry)
 }
+*/
 
 export async function GET() {
   try {
-    const items = readKanban()
-    const models = readModels()
-    const modelMap = new Map(models.map((m: any) => [m.modelName, m]))
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+
+    const itemsFromDb = await db.collection("kanban").find({}).toArray()
+    const modelsFromDb = await db.collection("models").find({}).toArray()
+
+    const items = itemsFromDb.map(item => ({ ...item, id: item._id.toString() }));
+    const models = modelsFromDb.map(model => ({ ...model, id: model._id.toString() }));
 
     const enrichedItems = items.map((item: any) => {
       if (item.type === "model") {
-        // Attempt to find a matching model by title.
-        // In a real-world scenario, you'd likely use a more robust ID linking models and kanban items.
-        const modelDetails = modelMap.get(item.title)
+        const modelDetails = models.find(m => m.modelName.startsWith(item.title));
         if (modelDetails) {
           return {
             ...item,
@@ -70,21 +45,27 @@ export async function GET() {
       }
       return item
     })
+
     return NextResponse.json({ success: true, items: enrichedItems })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message || "Failed to read kanban data" }, { status: 500 })
+    return NextResponse.json({ success: false, error: e.message || "Failed to fetch kanban data" }, { status: 500 })
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const client = await clientPromise
+    const db = client.db("DeployZen")
     const body = await req.json()
-    const items = readKanban()
-    const newItem = { ...body, id: Date.now().toString() }
-    items.push(newItem)
-    writeKanban(items)
-    logActivity(`Created kanban item '${newItem.title || newItem.id}' in column '${newItem.status}'`)
-    return NextResponse.json({ success: true, item: newItem })
+
+    const newItem = { ...body, lastUpdated: new Date().toISOString() }
+    const result = await db.collection("kanban").insertOne(newItem)
+
+    const insertedDoc = { ...newItem, id: result.insertedId.toString() };
+
+    // await logActivity(`Created kanban item '${insertedDoc.title || insertedDoc.id}' in column '${insertedDoc.status}'`)
+
+    return NextResponse.json({ success: true, item: insertedDoc })
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message || "Failed to add kanban item" }, { status: 500 })
   }

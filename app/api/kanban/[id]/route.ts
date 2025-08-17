@@ -1,57 +1,67 @@
 import { NextRequest, NextResponse } from "next/server"
-import fs from "fs"
-import path from "path"
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
-const DATA_DIR = path.join(process.cwd(), "data")
-const KANBAN_FILE = path.join(DATA_DIR, "kanban.json")
-const ACTIVITY_LOG = path.join(process.cwd(), "data", "activity-log.md")
-
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-  if (!fs.existsSync(KANBAN_FILE)) fs.writeFileSync(KANBAN_FILE, JSON.stringify([]))
+// The file-based activity log is commented out.
+/*
+async function logActivity(message: string) {
+  // ...
 }
-
-function readKanban() {
-  ensureDataFile()
-  return JSON.parse(fs.readFileSync(KANBAN_FILE, "utf8"))
-}
-
-function writeKanban(data: any) {
-  ensureDataFile()
-  fs.writeFileSync(KANBAN_FILE, JSON.stringify(data, null, 2))
-}
-
-function logActivity(message: string) {
-  const timestamp = new Date().toISOString()
-  const logEntry = `## ${timestamp}\n- Feature: Kanban\n- Summary: ${message}\n\n`
-  fs.appendFileSync(ACTIVITY_LOG, logEntry)
-}
+*/
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const id = params.id
+    const { id } = params
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, error: "Invalid ID format" }, { status: 400 })
+    }
+    const client = await clientPromise
+    const db = client.db("DeployZen")
     const body = await req.json()
-    const items = readKanban()
-    const idx = items.findIndex((item: any) => item.id === id)
-    if (idx === -1) return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
-    items[idx] = { ...items[idx], ...body }
-    writeKanban(items)
-    logActivity(`Updated kanban item '${items[idx].title || id}' (column: '${items[idx].status}')`)
-    return NextResponse.json({ success: true, item: items[idx] })
-  } catch (e) {
-    return NextResponse.json({ success: false, error: "Failed to update kanban item" }, { status: 500 })
+
+    // Remove id from body to prevent it from being updated
+    delete body.id
+    delete body._id
+
+    const result = await db.collection("kanban").findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: body },
+      { returnDocument: "after" }
+    )
+
+    if (!result) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
+    }
+
+    const updatedDoc = { ...result, id: result._id.toString() };
+
+    // await logActivity(`Updated kanban item '${updatedDoc.title || id}' (column: '${updatedDoc.status}')`)
+
+    return NextResponse.json({ success: true, item: updatedDoc })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message || "Failed to update kanban item" }, { status: 500 })
   }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const id = params.id
-    const items = readKanban()
-    const filtered = items.filter((item: any) => item.id !== id)
-    writeKanban(filtered)
-    logActivity(`Deleted kanban item '${id}'`)
+    const { id } = params
+     if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, error: "Invalid ID format" }, { status: 400 })
+    }
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+
+    const result = await db.collection("kanban").deleteOne({ _id: new ObjectId(id) })
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
+    }
+
+    // await logActivity(`Deleted kanban item '${id}'`)
+
     return NextResponse.json({ success: true })
-  } catch (e) {
-    return NextResponse.json({ success: false, error: "Failed to delete kanban item" }, { status: 500 })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message || "Failed to delete kanban item" }, { status: 500 })
   }
 }
