@@ -1,32 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import fs from "fs"
-import path from "path"
-
-const DATA_DIR = path.join(process.cwd(), "data")
-const MODELS_FILE = path.join(DATA_DIR, "models.json")
-
-interface ModelData {
-  id: string
-  modelName: string
-  filePath: string
-  mode: "ollama" | "llama.cpp" | "onnx" | "torch"
-  tokens: number
-  batchSize: number
-  status: "Pending" | "Running" | "Failed" | "Stopped"
-  port?: number
-  createdAt: string
-  lastActivity?: string
-  processId?: number
-}
-
-function loadModels(): ModelData[] {
-  if (!fs.existsSync(MODELS_FILE)) return []
-  try {
-    return JSON.parse(fs.readFileSync(MODELS_FILE, "utf8"))
-  } catch {
-    return []
-  }
-}
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
 async function checkOllama(): Promise<void> {
   const res = await fetch("http://localhost:11434/api/tags")
@@ -54,13 +28,18 @@ async function checkTorch(port?: number, modelName?: string): Promise<void> {
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const models = loadModels()
-    const model = models.find(m => m.id === params.id)
+    if (!params.id || !ObjectId.isValid(params.id)) {
+        return NextResponse.json({ status: "failed", error: "Invalid model ID" }, { status: 400 })
+    }
+
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+    const model = await db.collection("models").findOne({ _id: new ObjectId(params.id) })
+
     if (!model) {
       return NextResponse.json({ status: "failed", error: "Model not found" }, { status: 404 })
     }
 
-    // Short-circuit if not marked running
     if (model.status !== "Running") {
       return NextResponse.json({ status: "failed", error: `Model status is ${model.status}` }, { status: 400 })
     }

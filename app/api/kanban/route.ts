@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
-// The file-based activity log is commented out as it's not suitable for a serverless environment.
-// A database-based logging mechanism should be implemented in the future.
-/*
 async function logActivity(message: string) {
-  const fs = require('fs');
-  const path = require('path');
-  const ACTIVITY_LOG = path.join(process.cwd(), "data", "activity-log.md")
-  const timestamp = new Date().toISOString()
-  const logEntry = `## ${timestamp}\n- Feature: Kanban\n- Summary: ${message}\n\n`
-  fs.appendFileSync(ACTIVITY_LOG, logEntry)
+  try {
+    const client = await clientPromise;
+    const db = client.db("DeployZen");
+    await db.collection("activity_log").insertOne({
+      timestamp: new Date(),
+      feature: "Kanban",
+      summary: message,
+    });
+  } catch (error) {
+    console.error("Error logging activity:", error);
+  }
 }
-*/
 
 export async function GET() {
   try {
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const insertedDoc = { ...newItem, id: result.insertedId.toString() };
 
-    // await logActivity(`Created kanban item '${insertedDoc.title || insertedDoc.id}' in column '${insertedDoc.status}'`)
+    await logActivity(`Created kanban item '${insertedDoc.title || insertedDoc.id}' in column '${insertedDoc.status}'`)
 
     return NextResponse.json({ success: true, item: insertedDoc })
   } catch (e: any) {

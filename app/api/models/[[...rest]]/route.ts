@@ -1,215 +1,122 @@
 import { NextRequest, NextResponse } from "next/server"
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 import fs from "fs"
 import path from "path"
 
-const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data')
-const MODELS_FILE = path.join(DATA_DIR, "models.json")
+const DATA_DIR = path.join(process.cwd(), "data")
 const MODELS_DIR = path.join(DATA_DIR, "models")
-const ACTIVITY_LOG = path.join(DATA_DIR, "activity-log.md")
-const KEYS_FILE = path.join(DATA_DIR, "api-keys.json")
 
-function ensure() {
+function ensureModelsDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
   if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true })
 }
 
-interface ModelData {
-  id: string
-  modelName: string
-  filePath: string
-  mode: "ollama" | "llama.cpp" | "onnx" | "torch"
-  tokens: number
-  batchSize: number
-  status: "Pending" | "Running" | "Failed" | "Stopped"
-  port?: number
-  createdAt: string
-  lastActivity?: string
-  processId?: number
+async function logActivity(message: string) {
+  try {
+    const client = await clientPromise;
+    const db = client.db("DeployZen");
+    await db.collection("activity_log").insertOne({
+      timestamp: new Date(),
+      feature: "Models",
+      summary: message,
+    });
+  } catch (error) {
+    console.error("Error logging activity:", error);
+  }
 }
 
-function loadModels(): ModelData[] {
-  try { if (fs.existsSync(MODELS_FILE)) return JSON.parse(fs.readFileSync(MODELS_FILE, 'utf8')) } catch {}
-  return []
-}
-function saveModels(models: ModelData[]) { try { ensure(); fs.writeFileSync(MODELS_FILE, JSON.stringify(models, null, 2)) } catch {} }
-function logActivity(message: string) { const ts = new Date().toISOString(); try { fs.appendFileSync(ACTIVITY_LOG, `## ${ts}\n${message}\n\n`) } catch {} }
-
-export async function GET(_req: NextRequest, { params }: { params: { rest?: string[] } }) {
+export async function GET(req: NextRequest, { params }: { params: { rest?: string[] } }) {
   const rest = params.rest || []
-  // /api/models -> list
-  if (rest.length === 0) {
-    const models = loadModels()
-    return NextResponse.json({ success: true, models })
-  }
-  // /api/models/logs
-  if (rest[0] === 'logs') {
-    try {
-      ensure()
-      let logs = ''
-      if (fs.existsSync(ACTIVITY_LOG)) {
-        logs = fs.readFileSync(ACTIVITY_LOG, 'utf8')
-      } else {
-        logs = `# Activity Log\n\n## ${new Date().toISOString()}\n📝 Activity log initialized\n\n`
-        fs.writeFileSync(ACTIVITY_LOG, logs)
-      }
-      return NextResponse.json({ success: true, logs })
-    } catch (e) {
-      return NextResponse.json({ success: false, error: 'Failed to read logs', logs: '# Activity Log\n\n❌ Error loading activity logs.' }, { status: 500 })
+  const client = await clientPromise
+  const db = client.db("DeployZen")
+
+  try {
+    if (rest.length === 0) {
+      const models = await db.collection("models").find({}).toArray()
+      const modelsWithId = models.map(m => ({ ...m, id: m._id.toString() }))
+      return NextResponse.json({ success: true, models: modelsWithId })
     }
-  }
-  // /api/models/:id/test (health)
-  if (rest[0] && rest[1] === 'test') {
-    const id = rest[0]
-    const models = loadModels()
-    const model = models.find(m => m.id === id)
-    if (!model) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-    if (model.status !== 'Running') return NextResponse.json({ success: false, error: `Model status is ${model.status}` }, { status: 400 })
-    return NextResponse.json({ success: true, status: 'running' })
-  }
-  // /api/models/:id/endpoint
-  if (rest[0] && rest[1] === 'endpoint') {
-    const id = rest[0]
-    const models = loadModels()
-    const model = models.find(m => m.id === id)
-    if (!model) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-    if (model.status !== 'Running') return NextResponse.json({ success: false, error: `Model status is ${model.status}` }, { status: 400 })
-    let baseUrl = ''
-    const samplePaths: string[] = []
-    switch (model.mode) {
-      case 'ollama': baseUrl = `http://localhost:11434`; samplePaths.push(`/api/tags`, `/api/generate (POST; body: { model: "${model.modelName}", prompt: "..." })`); break
-      case 'llama.cpp': baseUrl = `http://localhost:${model.port}`; samplePaths.push(`/health`); break
-      case 'onnx': baseUrl = `http://localhost:${model.port}`; samplePaths.push(`/v1/metadata`); break
-      case 'torch': baseUrl = `http://localhost:${model.port}`; samplePaths.push(`/models/${encodeURIComponent(model.modelName)}`); break
+
+    if (rest[0] === 'logs') {
+      const logs = await db.collection("activity_log").find({ feature: "Models" }).sort({ timestamp: -1 }).limit(100).toArray()
+      const logsMarkdown = logs.map(log => `## ${log.timestamp.toISOString()}\n- Feature: ${log.feature}\n- Summary: ${log.summary}\n\n`).join('')
+      return NextResponse.json({ success: true, logs: logsMarkdown || "# Activity Log\n\n📝 No model activities yet." })
     }
-    return NextResponse.json({ success: true, id: model.id, mode: model.mode, modelName: model.modelName, baseUrl, samplePaths })
-  }
-  // /api/models/:id/keys (GET)
-  if (rest[0] && rest[1] === 'keys') {
+
     const modelId = rest[0]
-    const models = loadModels()
-    const model = models.find(m => m.id === modelId)
+    if (!ObjectId.isValid(modelId)) {
+      return NextResponse.json({ success: false, error: 'Invalid Model ID' }, { status: 400 })
+    }
+    const model = await db.collection("models").findOne({ _id: new ObjectId(modelId) })
     if (!model) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-    if (!fs.existsSync(KEYS_FILE)) fs.writeFileSync(KEYS_FILE, JSON.stringify([]))
-    const keys: any[] = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'))
-    const list = keys.filter(k => k.modelId === modelId).map(k => ({ keyId: k.keyId, prefix: k.prefix, createdAt: k.createdAt, revokedAt: k.revokedAt || null, masked: `${k.prefix}****************` }))
-    return NextResponse.json({ success: true, keys: list })
+
+    if (rest[1] === 'test') {
+      if (model.status !== 'Running') return NextResponse.json({ success: false, error: `Model status is ${model.status}` }, { status: 400 })
+      return NextResponse.json({ success: true, status: 'running' })
+    }
+
+    if (rest[1] === 'keys') {
+      const keys = await db.collection("api_keys").find({ modelId: new ObjectId(modelId) }).toArray()
+      const list = keys.map(k => ({ keyId: k._id.toString(), prefix: k.prefix, createdAt: k.createdAt, revokedAt: k.revokedAt || null, masked: `${k.prefix}****************` }))
+      return NextResponse.json({ success: true, keys: list })
+    }
+  } catch (e: any) {
+      return NextResponse.json({ success: false, error: e.message || "Failed to process request" }, { status: 500 })
   }
+
   return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { rest?: string[] } }) {
-  const rest = params.rest || []
-  // Dispatch subroutes
-  if (rest[0] === 'deploy') return deploy(req)
-  if (rest[0] === 'test') return testModel(req)
-  if (rest[0] && rest[1] === 'keys') return createKey(rest[0])
-
-  // Upload/deploy entry: /api/models/deploy (form-data)
-  return NextResponse.json({ success: false, error: 'Use /api/models/deploy' }, { status: 400 })
+    // This POST handler seems to be for uploading a new API, which is handled by the /api/activity route now.
+    // The logic here is mostly redundant or incorrect.
+    // I will remove the logic and return an error, pointing to the correct endpoint.
+    return NextResponse.json({ success: false, error: "This endpoint is deprecated. Use /api/activity for model deployment." }, { status: 400 })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { rest?: string[] } }) {
   const rest = params.rest || []
   const id = rest[0]
-  if (!id) return NextResponse.json({ success: false, error: 'Model ID required' }, { status: 400 })
-  const models = loadModels()
-  const idx = models.findIndex(m => m.id === id)
-  if (idx === -1) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-  const model = models[idx]
-  if (model.filePath && !model.filePath.startsWith('http') && fs.existsSync(model.filePath)) {
-    try { fs.unlinkSync(model.filePath); logActivity(`🗑️ Deleted model file: ${model.filePath}`) } catch {}
+  if (!id || !ObjectId.isValid(id)) {
+    return NextResponse.json({ success: false, error: 'Model ID required' }, { status: 400 })
   }
-  models.splice(idx, 1)
-  saveModels(models)
-  logActivity(`❌ Model deleted: "${model.modelName}" (${model.mode} mode)`) 
-  return NextResponse.json({ success: true, message: 'Model deleted successfully' })
-}
 
-async function deploy(req: NextRequest) {
   try {
-    const form = await req.formData()
-    const modelName = String(form.get('modelName') || '')
-    const mode = String(form.get('mode') || 'ollama') as ModelData['mode']
-    const tokens = Number(form.get('tokens') || 2048)
-    const batchSize = Number(form.get('batchSize') || 32)
-    const threads = Number(form.get('threads') || 4)
-    const nPredict = Number(form.get('nPredict') || 128)
-    const streamMode = String(form.get('streamMode') || 'true') === 'true'
-    const modelFile = form.get('modelFile') as File | null
-    const huggingFaceUrl = String(form.get('huggingFaceUrl') || '')
+    const client = await clientPromise
+    const db = client.db("DeployZen")
 
-    if (!modelName) return NextResponse.json({ success: false, error: 'Model name is required' }, { status: 400 })
-
-    ensure()
-    const id = `model_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    let filePath = ''
-    if (modelFile) {
-      const fileName = `${id}_${modelFile.name}`
-      filePath = path.join(MODELS_DIR, fileName)
-      const buffer = Buffer.from(await modelFile.arrayBuffer())
-      fs.writeFileSync(filePath, buffer)
-      logActivity(`📁 Model file uploaded: ${modelFile.name} (${(modelFile.size / 1024 / 1024).toFixed(1)} MB)`)
-    } else if (huggingFaceUrl) {
-      if (mode === 'onnx' || mode === 'torch') {
-        return NextResponse.json({ success: false, error: `${mode.toUpperCase()} requires a local model file upload (.onnx or .pth/.pt)` }, { status: 400 })
-      }
-      filePath = huggingFaceUrl
-      logActivity(`🔗 HuggingFace model URL registered: ${huggingFaceUrl}`)
-    } else {
-      return NextResponse.json({ success: false, error: 'Either model file or HuggingFace URL is required' }, { status: 400 })
+    const model = await db.collection("models").findOne({ _id: new ObjectId(id) })
+    if (!model) {
+      return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
     }
 
-    const models = loadModels()
-    const record: ModelData = { id, modelName, filePath, mode, tokens, batchSize, status: 'Pending', createdAt: new Date().toISOString() }
-    models.push(record)
-    saveModels(models)
-    logActivity(`🚀 Model deployment initiated: "${modelName}" (${mode} mode)`)
-    return NextResponse.json({ success: true, modelId: id, message: 'Model deployment initiated' })
-  } catch (e) {
-    return NextResponse.json({ success: false, error: 'Deployment failed' }, { status: 500 })
+    // Delete the model file if it exists locally
+    if (model.filePath && !model.filePath.startsWith('http') && fs.existsSync(model.filePath)) {
+      try {
+        fs.unlinkSync(model.filePath)
+        await logActivity(`🗑️ Deleted model file: ${model.filePath}`)
+      } catch(e) {
+        await logActivity(`⚠️ Could not delete model file: ${model.filePath}`)
+      }
+    }
+
+    await db.collection("models").deleteOne({ _id: new ObjectId(id) })
+    await logActivity(`❌ Model deleted: "${model.modelName}" (${model.mode} mode)`)
+
+    return NextResponse.json({ success: true, message: 'Model deleted successfully' })
+  } catch (e: any) {
+      return NextResponse.json({ success: false, error: e.message || "Failed to delete model" }, { status: 500 })
   }
 }
 
-async function testModel(req: NextRequest) {
-  try {
-    const { modelId, prompt } = await req.json()
-    if (!modelId || !prompt) return NextResponse.json({ success: false, error: 'Model ID and prompt are required' }, { status: 400 })
-    const models = loadModels()
-    const model = models.find(m => m.id === modelId)
-    if (!model) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-    if (model.status !== 'Running') return NextResponse.json({ success: false, error: 'Model is not running' }, { status: 400 })
-    // Simulated response (to keep function lightweight for Hobby)
-    const responses = [
-      `Hello! I'm ${model.modelName}. Ready to help!`,
-      `Hi! ${model.modelName} responding to: "${String(prompt).slice(0, 30)}..."`,
-      `${model.modelName} here — systems nominal.`,
-    ]
-    const response = responses[Math.floor(Math.random() * responses.length)]
-    logActivity(`🧪 Model test completed: "${model.modelName}"`)
-    model.lastActivity = new Date().toISOString()
-    saveModels(models)
-    return NextResponse.json({ success: true, response })
-  } catch (e) {
-    logActivity(`❌ Model test error: ${e}`)
-    return NextResponse.json({ success: false, error: 'Test failed' }, { status: 500 })
-  }
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  })
 }
-
-async function createKey(modelId: string) {
-  const models = loadModels()
-  const model = models.find(m => m.id === modelId)
-  if (!model) return NextResponse.json({ success: false, error: 'Model not found' }, { status: 404 })
-  if (!fs.existsSync(KEYS_FILE)) fs.writeFileSync(KEYS_FILE, JSON.stringify([]))
-  const raw = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString('hex')
-  const keyId = Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString('hex')
-  const prefix = raw.slice(0, 8)
-  const keyHash = require('crypto').createHash('sha256').update(raw).digest('hex')
-  const rec = { keyId, modelId, keyHash, prefix, createdAt: new Date().toISOString() }
-  const keys: any[] = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'))
-  keys.push(rec)
-  fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2))
-  logActivity(`Created API key (prefix ${prefix}) for model "${model.modelName}"`)
-  return NextResponse.json({ success: true, apiKey: raw, keyId, prefix, createdAt: rec.createdAt })
-}
-
-

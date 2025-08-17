@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
-// The file-based activity log is commented out.
-/*
 async function logActivity(message: string) {
-  // ...
+    try {
+        const client = await clientPromise;
+        const db = client.db("DeployZen");
+        await db.collection("activity_log").insertOne({
+            timestamp: new Date(),
+            feature: "Kanban",
+            summary: message,
+        });
+    } catch (error) {
+        console.error("Error logging activity:", error);
+    }
 }
-*/
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -19,7 +26,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const db = client.db("DeployZen")
     const body = await req.json()
 
-    // Remove id from body to prevent it from being updated
     delete body.id
     delete body._id
 
@@ -35,7 +41,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     const updatedDoc = { ...result, id: result._id.toString() };
 
-    // await logActivity(`Updated kanban item '${updatedDoc.title || id}' (column: '${updatedDoc.status}')`)
+    await logActivity(`Updated kanban item '${updatedDoc.title || id}' (column: '${updatedDoc.status}')`)
 
     return NextResponse.json({ success: true, item: updatedDoc })
   } catch (e: any) {
@@ -52,13 +58,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     const client = await clientPromise
     const db = client.db("DeployZen")
 
+    const itemToDelete = await db.collection("kanban").findOne({ _id: new ObjectId(id) });
+    if (!itemToDelete) {
+        return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
+    }
+
     const result = await db.collection("kanban").deleteOne({ _id: new ObjectId(id) })
 
     if (result.deletedCount === 0) {
-      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
+      return NextResponse.json({ success: false, error: "Item not found during delete" }, { status: 404 })
     }
 
-    // await logActivity(`Deleted kanban item '${id}'`)
+    await logActivity(`Deleted kanban item '${itemToDelete.title || id}'`)
 
     return NextResponse.json({ success: true })
   } catch (e: any) {

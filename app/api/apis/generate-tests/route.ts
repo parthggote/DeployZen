@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import fs from "fs"
-import path from "path"
-
-const RUNTIME_DATA_ROOT = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data')
-const DATA_DIR = RUNTIME_DATA_ROOT
-const APIS_FILE = path.join(DATA_DIR, "apis.json")
-const APIS_DIR = path.join(DATA_DIR, "apis")
-
-function ensureDirectories() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-    if (!fs.existsSync(APIS_DIR)) fs.mkdirSync(APIS_DIR, { recursive: true })
-  } catch {}
-}
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
 interface TestCase {
   id: string
@@ -27,34 +15,24 @@ interface TestCase {
   suggestion?: string
 }
 
-function loadApis(): any[] {
+async function logActivity(message: string) {
   try {
-    ensureDirectories()
-    if (fs.existsSync(APIS_FILE)) {
-      return JSON.parse(fs.readFileSync(APIS_FILE, "utf8"))
-    }
-  } catch {}
-  return []
-}
-
-function saveApis(apis: any[]) {
-  try {
-    ensureDirectories()
-    fs.writeFileSync(APIS_FILE, JSON.stringify(apis, null, 2))
-  } catch {}
-}
-
-function logActivity(message: string) {
-  const ts = new Date().toISOString()
-  const entry = `## ${ts}\n- Feature: APIs\n- Summary: ${message}\n\n`
-  try { ensureDirectories(); fs.appendFileSync(path.join(DATA_DIR, "activity-log.md"), entry) } catch {}
+    const client = await clientPromise;
+    const db = client.db("DeployZen");
+    await db.collection("activity_log").insertOne({
+      timestamp: new Date(),
+      feature: "APIs",
+      summary: message,
+    });
+  } catch (error) {
+    console.error("Error logging activity:", error);
+  }
 }
 
 async function generateAITestCases(apiContent: string, apiName: string, description: string): Promise<TestCase[]> {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ""
   
   if (!GEMINI_API_KEY) {
-    // Fallback to basic test cases if no API key
     return generateFallbackTestCases(apiContent, apiName)
   }
 
@@ -118,24 +96,19 @@ Return only the JSON array, no markdown formatting or additional text.`
       return generateFallbackTestCases(apiContent, apiName)
     }
 
-    // Extract JSON from the response
     let jsonText = generatedText.trim()
-    
-    // Remove markdown code blocks if present
     if (jsonText.startsWith('```json')) {
       jsonText = jsonText.replace(/```json\n?/, '').replace(/\n?```$/, '')
     } else if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/```\n?/, '').replace(/\n?```$/, '')
     }
 
-    // Parse the JSON
     const testObjects = JSON.parse(jsonText)
     
     if (!Array.isArray(testObjects)) {
       throw new Error('Generated content is not an array')
     }
 
-    // Convert to TestCase format
     const testCases: TestCase[] = testObjects.map((test, index) => ({
       id: `test_${Date.now()}_${index + 1}`,
       name: test.name || `Generated Test ${index + 1}`,
@@ -154,12 +127,11 @@ Return only the JSON array, no markdown formatting or additional text.`
 }
 
 function generateFallbackTestCases(apiContent: string, apiName: string): TestCase[] {
-  // For the fallback, we'll just return a simple test case
   return [{
     id: `test_${Date.now()}_1`,
     name: `Basic API Test`,
     description: "Basic test for the uploaded API",
-    testCode: `describe('${apiName} API', () => {\n  it('should be accessible', async () => {\n    // Add your API endpoint here\n    const response = await fetch('/api/endpoint');\n    expect(response).toBeDefined();\n  });\n});`,
+    testCode: `describe('${apiName} API', () => {\n  it('should be accessible', async () => {\n    const response = await fetch('/api/endpoint');\n    expect(response).toBeDefined();\n  });\n});`,
     status: "pending",
     timestamp: new Date().toISOString(),
   }]
@@ -168,32 +140,45 @@ function generateFallbackTestCases(apiContent: string, apiName: string): TestCas
 export async function POST(req: NextRequest) {
   try {
     const { apiId } = await req.json()
-    if (!apiId) return NextResponse.json({ success: false, error: "API ID is required" }, { status: 400 })
-    const apis = loadApis()
-    const api = apis.find(a => a.id === apiId)
-    if (!api) return NextResponse.json({ success: false, error: "API not found" }, { status: 404 })
-
-    let content = ""
-    try {
-      content = fs.readFileSync(api.filePath, 'utf8')
-    } catch {
-      return NextResponse.json({ success: false, error: "Could not read API file" }, { status: 500 })
+    if (!apiId || !ObjectId.isValid(apiId)) {
+      return NextResponse.json({ success: false, error: "Invalid API ID" }, { status: 400 })
     }
 
-    // Generate AI-powered test cases using Gemini
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+    const api = await db.collection("apis").findOne({ _id: new ObjectId(apiId) })
+
+    if (!api) {
+      return NextResponse.json({ success: false, error: "API not found" }, { status: 404 })
+    }
+
+    const content = (api as any).content || ''
+    if (!content) {
+        return NextResponse.json({ success: false, error: "API content not found, cannot generate tests" }, { status: 400 })
+    }
+
     const testCases = await generateAITestCases(content, api.name, api.description || "")
 
-    api.testCases = testCases
-    api.status = "testing"
-    api.totalTests = testCases.length
-    api.passedTests = 0
-    api.failedTests = 0
-    api.lastTested = new Date().toISOString()
-    saveApis(apis)
-    logActivity(`Generated ${testCases.length} AI-powered test cases for API '${api.name}'`)
-    return NextResponse.json({ success: true, testCases, message: `Generated ${testCases.length} test cases` }, { headers: { 'Access-Control-Allow-Origin': '*' } })
-  } catch (e) {
+    await db.collection("apis").updateOne(
+      { _id: new ObjectId(apiId) },
+      {
+        $set: {
+          testCases: testCases,
+          status: "testing",
+          totalTests: testCases.length,
+          passedTests: 0,
+          failedTests: 0,
+          lastTested: new Date().toISOString()
+        }
+      }
+    )
+
+    await logActivity(`Generated ${testCases.length} AI-powered test cases for API '${api.name}'`)
+
+    return NextResponse.json({ success: true, testCases, message: `Generated ${testCases.length} test cases` })
+
+  } catch (e: any) {
     console.error('Test generation error:', e)
-    return NextResponse.json({ success: false, error: "Failed to generate test cases" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } })
+    return NextResponse.json({ success: false, error: "Failed to generate test cases" }, { status: 500 })
   }
 }
