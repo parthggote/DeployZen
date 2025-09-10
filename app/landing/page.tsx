@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Bot, Zap, BarChart3, Shield, ArrowRight, Cpu } from "lucide-react"
+import { Bot, Zap, BarChart3, Shield, ArrowRight, Cpu, LayoutGrid, CreditCard, FileText, LifeBuoy } from "lucide-react"
 import Link from "next/link"
 import HeroSection from "@/components/HeroSection"
 import { useEffect, useRef, useState } from "react"
@@ -66,33 +66,37 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center space-x-8">
             <a
               href="#features"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
               onClick={e => {e.preventDefault(); document.getElementById('features')?.scrollIntoView({behavior: 'smooth'});}}
             >
+              <LayoutGrid className="w-4 h-4" />
               Features
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full"></span>
             </a>
             <a
               href="#pricing"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
               onClick={e => {e.preventDefault(); document.getElementById('pricing')?.scrollIntoView({behavior: 'smooth'});}}
             >
+              <CreditCard className="w-4 h-4" />
               Pricing
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full"></span>
             </a>
             <a
               href="#docs"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
               onClick={e => {e.preventDefault(); document.getElementById('docs')?.scrollIntoView({behavior: 'smooth'});}}
             >
+              <FileText className="w-4 h-4" />
               Docs
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full"></span>
             </a>
             <a
               href="#support"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
               onClick={e => {e.preventDefault(); document.getElementById('support')?.scrollIntoView({behavior: 'smooth'});}}
             >
+              <LifeBuoy className="w-4 h-4" />
               Support
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full"></span>
             </a>
