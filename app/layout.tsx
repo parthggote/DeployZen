@@ -4,7 +4,6 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Instrument_Serif } from "next/font/google"
-import localFont from "next/font/local"
 import { Suspense } from "react"
 import "./globals.css"
 import { AudioProvider } from "./audio-context"
@@ -14,17 +13,6 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
   variable: "--font-instrument-serif",
   weight: "400",
-})
-
-const sdGlitchRobot = localFont({
-  src: [
-    {
-      path: "https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap",
-      weight: "400",
-    },
-  ],
-  variable: "--font-sd-glitch-robot",
-  display: "swap",
 })
 
 export const metadata: Metadata = {
@@ -39,7 +27,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${instrumentSerif.variable} ${sdGlitchRobot.variable} antialiased`}>
+    <html lang="en" className={`${instrumentSerif.variable} antialiased`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+      </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AudioProvider>
           <Suspense fallback={null}>{children}</Suspense>
