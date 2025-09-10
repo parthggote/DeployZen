@@ -14,7 +14,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const play = () => {
     if (audioRef.current) {
       // User has confirmed audio.mp3 exists in /public
-      audioRef.current.src = "/audio.mp3"
+      audioRef.current.src = "/paranoid-instrumental.mp3"
       audioRef.current.play().catch(error => {
         console.error("Audio play failed:", error)
       })
