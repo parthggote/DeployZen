@@ -38,151 +38,155 @@ interface ModelData {
   huggingFaceEndpointUrl?: string
 }
 
-async function logActivity(message: string) {
-  try {
+const modelActions = {
+  async logActivity(message: string) {
+    try {
+      const client = await clientPromise;
+      const db = client.db("DeployZen");
+      await db.collection("activity_log").insertOne({
+        timestamp: new Date(),
+        feature: "Models",
+        summary: message,
+      });
+    } catch (error) {
+      console.error("Error writing to activity log:", error);
+    }
+  },
+
+  async updateModelStatus(modelId: ObjectId, status: ModelData['status'], details: any = {}) {
+      const client = await clientPromise;
+      const db = client.db("DeployZen");
+      await db.collection("models").updateOne(
+          { _id: modelId },
+          { $set: { status, ...details, lastActivity: new Date().toISOString() } }
+      );
+  },
+
+  async getAvailablePort(startPort = 11434): Promise<number> {
     const client = await clientPromise;
     const db = client.db("DeployZen");
-    await db.collection("activity_log").insertOne({
-      timestamp: new Date(),
-      feature: "Models",
-      summary: message,
-    });
-  } catch (error) {
-    console.error("Error writing to activity log:", error);
+    const models = await db.collection("models").find({ port: { $exists: true } }).toArray();
+    const usedPorts = models.map((m) => m.port).filter(Boolean) as number[];
+    const reserved = new Set<number>([11434, ...usedPorts]);
+    let port = startPort;
+    while (reserved.has(port)) port++;
+    return port;
+  },
+
+  async deployModel(modelData: ModelData): Promise<boolean> {
+    try {
+      let success = false;
+      if (modelData.mode === "huggingface") {
+        success = await this.deployWithHuggingFace(modelData)
+      } else if (modelData.mode === "ollama") {
+        success = await this.deployWithOllama(modelData)
+      } else if (modelData.mode === "llama.cpp") {
+        success = await this.deployWithLlamaCpp(modelData)
+      } else if (modelData.mode === "onnx") {
+        success = await this.deployWithOnnx(modelData)
+      } else if (modelData.mode === "torch") {
+        success = await this.deployWithTorch(modelData)
+      } else {
+        throw new Error(`Unsupported mode: ${modelData.mode}`)
+      }
+
+      if (!success) {
+          await this.updateModelStatus(modelData._id, "Failed");
+      }
+      return success;
+
+    } catch (error: any) {
+      console.error("Deployment error:", error)
+      await this.updateModelStatus(modelData._id, "Failed");
+      await this.logActivity(`❌ Deployment failed for "${modelData.modelName}": ${error.message}`)
+      return false
+    }
+  },
+
+  async deployWithHuggingFace(modelData: ModelData): Promise<boolean> {
+    try {
+      await this.logActivity(`🚀 Initiating Hugging Face deployment for "${modelData.modelName}"`);
+
+      const endpointName = modelData.modelName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase() + `-${modelData._id.toString().slice(-4)}`;
+      await this.updateModelStatus(modelData._id, "Initializing", { huggingFaceEndpointName: endpointName });
+
+      const hfEndpoint = await createHuggingFaceInferenceEndpoint({
+          name: endpointName,
+          repository: modelData.filePath, // filePath holds the HF model ID
+          framework: "pytorch",
+          task: "text-generation",
+          provider: {
+              vendor: "aws",
+              region: "us-east-1",
+          },
+          compute: {
+              accelerator: "gpu",
+              instance_size: "x1",
+              instance_type: "nvidia-a10g",
+              scaling: {
+                  minReplica: 0,
+                  maxReplica: 1,
+              }
+          },
+          type: "protected",
+      });
+
+      await this.updateModelStatus(modelData._id, "Initializing", {
+          huggingFaceEndpointName: hfEndpoint.name,
+          status: hfEndpoint.status.state
+      });
+
+      await this.logActivity(`✅ Hugging Face endpoint creation initiated for "${modelData.modelName}". Status: ${hfEndpoint.status.state}`);
+      return true;
+    } catch (error: any) {
+      await this.logActivity(`❌ Hugging Face deployment failed for "${modelData.modelName}": ${error.message}`);
+      return false;
+    }
+  },
+
+  async deployWithOllama(modelData: ModelData): Promise<boolean> {
+    try {
+      const ollamaCheck = await fetch("http://localhost:11434/api/tags")
+      if (!ollamaCheck.ok) throw new Error("Ollama is not running.")
+      await this.updateModelStatus(modelData._id, "Running", { processId: Date.now() });
+      await this.logActivity(`✅ Ollama model "${modelData.modelName}" deployed and tested successfully`)
+      return true
+    } catch (error: any) {
+      await this.logActivity(`❌ Ollama deployment failed for "${modelData.modelName}": ${error.message}`)
+      await this.updateModelStatus(modelData._id, "Failed");
+      return false
+    }
+  },
+
+  async deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
+    await this.logActivity(`❌ llama.cpp deployment is not supported in this environment.`);
+    return false;
+  },
+
+  async deployWithOnnx(modelData: ModelData): Promise<boolean> {
+    try {
+      const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+      let ort = isServerless ? await import('onnxruntime-web') : await import('onnxruntime-node');
+      const session = await ort.InferenceSession.create(modelData.filePath);
+      onnxSessions.set(modelData.id, session);
+      await this.updateModelStatus(modelData._id, "Running", { processId: Date.now() });
+      await this.logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully.`);
+      return true;
+    } catch (error: any) {
+      await this.logActivity(`❌ ONNX deployment failed for "${modelData.modelName}": ${error.message}`);
+      return false;
+    }
+  },
+
+  async deployWithTorch(modelData: ModelData): Promise<boolean> {
+    await this.logActivity(`❌ TorchServe deployment is not supported in this environment.`);
+    return false;
   }
 }
 
-async function updateModelStatus(modelId: ObjectId, status: ModelData['status'], details: any = {}) {
-    const client = await clientPromise;
-    const db = client.db("DeployZen");
-    await db.collection("models").updateOne(
-        { _id: modelId },
-        { $set: { status, ...details, lastActivity: new Date().toISOString() } }
-    );
-}
-
-async function getAvailablePort(startPort = 11434): Promise<number> {
-  const client = await clientPromise;
-  const db = client.db("DeployZen");
-  const models = await db.collection("models").find({ port: { $exists: true } }).toArray();
-  const usedPorts = models.map((m) => m.port).filter(Boolean) as number[];
-  const reserved = new Set<number>([11434, ...usedPorts]);
-  let port = startPort;
-  while (reserved.has(port)) port++;
-  return port;
-}
 
 export function getOnnxSession(modelId: string): any | undefined {
   return onnxSessions.get(modelId);
-}
-
-async function deployModel(modelData: ModelData): Promise<boolean> {
-  try {
-    let success = false;
-    if (modelData.mode === "huggingface") {
-      success = await deployWithHuggingFace(modelData)
-    } else if (modelData.mode === "ollama") {
-      success = await deployWithOllama(modelData)
-    } else if (modelData.mode === "llama.cpp") {
-      success = await deployWithLlamaCpp(modelData)
-    } else if (modelData.mode === "onnx") {
-      success = await deployWithOnnx(modelData)
-    } else if (modelData.mode === "torch") {
-      success = await deployWithTorch(modelData)
-    } else {
-      throw new Error(`Unsupported mode: ${modelData.mode}`)
-    }
-
-    if (!success) {
-        await updateModelStatus(modelData._id, "Failed");
-    }
-    return success;
-
-  } catch (error: any) {
-    console.error("Deployment error:", error)
-    await updateModelStatus(modelData._id, "Failed");
-    await logActivity(`❌ Deployment failed for "${modelData.modelName}": ${error.message}`)
-    return false
-  }
-}
-
-async function deployWithHuggingFace(modelData: ModelData): Promise<boolean> {
-  try {
-    await logActivity(`🚀 Initiating Hugging Face deployment for "${modelData.modelName}"`);
-
-    const endpointName = modelData.modelName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase() + `-${modelData._id.toString().slice(-4)}`;
-    await updateModelStatus(modelData._id, "Initializing", { huggingFaceEndpointName: endpointName });
-
-    const hfEndpoint = await createHuggingFaceInferenceEndpoint({
-        name: endpointName,
-        repository: modelData.filePath, // filePath holds the HF model ID
-        framework: "pytorch",
-        task: "text-generation",
-        provider: {
-            vendor: "aws",
-            region: "us-east-1",
-        },
-        compute: {
-            accelerator: "gpu",
-            instance_size: "x1",
-            instance_type: "nvidia-a10g",
-            scaling: {
-                minReplica: 0,
-                maxReplica: 1,
-            }
-        },
-        type: "protected",
-    });
-
-    await updateModelStatus(modelData._id, "Initializing", {
-        huggingFaceEndpointName: hfEndpoint.name,
-        status: hfEndpoint.status.state
-    });
-
-    await logActivity(`✅ Hugging Face endpoint creation initiated for "${modelData.modelName}". Status: ${hfEndpoint.status.state}`);
-    return true;
-  } catch (error: any) {
-    await logActivity(`❌ Hugging Face deployment failed for "${modelData.modelName}": ${error.message}`);
-    return false;
-  }
-}
-
-async function deployWithOllama(modelData: ModelData): Promise<boolean> {
-  try {
-    const ollamaCheck = await fetch("http://localhost:11434/api/tags")
-    if (!ollamaCheck.ok) throw new Error("Ollama is not running.")
-    await updateModelStatus(modelData._id, "Running", { processId: Date.now() });
-    await logActivity(`✅ Ollama model "${modelData.modelName}" deployed and tested successfully`)
-    return true
-  } catch (error: any) {
-    await logActivity(`❌ Ollama deployment failed for "${modelData.modelName}": ${error.message}`)
-    return false
-  }
-}
-
-async function deployWithLlamaCpp(modelData: ModelData): Promise<boolean> {
-  await logActivity(`❌ llama.cpp deployment is not supported in this environment.`);
-  return false;
-}
-
-async function deployWithOnnx(modelData: ModelData): Promise<boolean> {
-  try {
-    const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-    let ort = isServerless ? await import('onnxruntime-web') : await import('onnxruntime-node');
-    const session = await ort.InferenceSession.create(modelData.filePath);
-    onnxSessions.set(modelData.id, session);
-    await updateModelStatus(modelData._id, "Running", { processId: Date.now() });
-    await logActivity(`✅ ONNX model "${modelData.modelName}" loaded successfully.`);
-    return true;
-  } catch (error: any) {
-    await logActivity(`❌ ONNX deployment failed for "${modelData.modelName}": ${error.message}`);
-    return false;
-  }
-}
-
-async function deployWithTorch(modelData: ModelData): Promise<boolean> {
-  await logActivity(`❌ TorchServe deployment is not supported in this environment.`);
-  return false;
 }
 
 export async function POST(request: NextRequest) {
@@ -227,7 +231,7 @@ export async function POST(request: NextRequest) {
       filePath = path.join(MODELS_DIR, fileName)
       const buffer = Buffer.from(await modelFile.arrayBuffer())
       fs.writeFileSync(filePath, buffer)
-      await logActivity(`📁 Model file uploaded: ${modelFile.name} (${(modelFile.size / 1024 / 1024).toFixed(1)} MB)`)
+      await modelActions.logActivity(`📁 Model file uploaded: ${modelFile.name} (${(modelFile.size / 1024 / 1024).toFixed(1)} MB)`)
     } else {
       return NextResponse.json({ success: false, error: "A model file is required for this mode" }, { status: 400 })
     }
@@ -244,20 +248,22 @@ export async function POST(request: NextRequest) {
       threads,
       nPredict,
       streamMode,
-      port: mode === 'llama.cpp' ? await getAvailablePort(8080) : undefined,
+      port: mode === 'llama.cpp' ? await modelActions.getAvailablePort(8080) : undefined,
       size: modelFile ? modelFile.size : undefined,
       versions: []
     }
 
     await db.collection("models").insertOne(modelData);
-    await logActivity(`🚀 Model deployment initiated: "${modelName}" (${mode} mode)`)
+    await modelActions.logActivity(`🚀 Model deployment initiated: "${modelName}" (${mode} mode)`)
 
-    deployModel({ ...modelData, id: modelId.toString() });
+    modelActions.deployModel({ ...modelData, id: modelId.toString() });
 
     return NextResponse.json({ success: true, modelId: modelId.toString(), message: "Model deployment initiated" })
   } catch (error: any) {
     console.error("Deployment error:", error)
-    await logActivity(`❌ Deployment error: ${error.message}`)
+    await modelActions.logActivity(`❌ Deployment error: ${error.message}`)
     return NextResponse.json({ success: false, error: "Deployment failed" }, { status: 500 })
   }
 }
+
+export const _private = modelActions;
