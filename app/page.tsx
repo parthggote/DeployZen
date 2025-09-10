@@ -34,15 +34,29 @@ export default function LandingPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [navbarHeight, setNavbarHeight] = useState(0);
   const navbarRef = useRef<HTMLElement>(null);
+  const [showAudio, setShowAudio] = useState(false);
 
   useEffect(() => {
     if (navbarRef.current) {
       setNavbarHeight(navbarRef.current.offsetHeight);
     }
+    const hasVisited = localStorage.getItem('hasVisitedBefore');
+    if (!hasVisited) {
+      setShowAudio(true);
+      localStorage.setItem('hasVisitedBefore', 'true');
+    }
   }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-surface-secondary to-background">
+      {showAudio && (
+        <div className="fixed bottom-4 right-4 z-50">
+        <audio autoPlay>
+          <source src="/paranoid-instrumental.mp3" type="audio/mpeg" />
+          Your browser does not support the audio element.
+        </audio>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-surface/95 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
