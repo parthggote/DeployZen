@@ -165,8 +165,7 @@ const modelActions = {
 
   async deployWithOnnx(modelData: ModelData): Promise<boolean> {
     try {
-      const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-      let ort = isServerless ? await import('onnxruntime-web') : await import('onnxruntime-node');
+      const ort = await import('onnxruntime-web');
       const session = await ort.InferenceSession.create(modelData.filePath);
       onnxSessions.set(modelData.id, session);
       await this.updateModelStatus(modelData._id, "Running", { processId: Date.now() });
