@@ -30,12 +30,14 @@ const BotIcon = ({ size = "w-6 h-6", className = "" }) => {
   );
 };
 
+import { Music } from "lucide-react";
+
 export default function LandingPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [navbarHeight, setNavbarHeight] = useState(0);
   const navbarRef = useRef<HTMLElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [showPlayButton, setShowPlayButton] = useState(false);
 
   useEffect(() => {
     if (navbarRef.current) {
@@ -44,35 +46,34 @@ export default function LandingPage() {
 
     const hasVisited = localStorage.getItem('hasVisitedBefore');
     if (!hasVisited) {
-      setIsFirstVisit(true);
+      setShowPlayButton(true);
       localStorage.setItem('hasVisitedBefore', 'true');
     }
   }, []);
 
-  useEffect(() => {
-    const playAudio = () => {
-      audioRef.current?.play().catch(error => {
-        console.error("Audio play failed:", error);
-      });
-    };
-
-    if (isFirstVisit) {
-      window.addEventListener('scroll', playAudio, { once: true });
-    }
-
-    return () => {
-      window.removeEventListener('scroll', playAudio);
-    };
-  }, [isFirstVisit]);
+  const handlePlayMusic = () => {
+    audioRef.current?.play().catch(error => {
+      console.error("Audio play failed:", error);
+    });
+    setShowPlayButton(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-surface-secondary to-background">
-      {isFirstVisit && (
-        <audio ref={audioRef} preload="auto">
-          <source src="/paranoid-instrumental.mp3" type="audio/mpeg" />
-          Your browser does not support the audio element.
-        </audio>
+      <audio ref={audioRef} preload="auto">
+        <source src="/paranoid-instrumental.mp3" type="audio/mpeg" />
+        Your browser does not support the audio element.
+      </audio>
+
+      {showPlayButton && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <Button onClick={handlePlayMusic} size="lg" className="shadow-lg">
+            <Music className="w-5 h-5 mr-2" />
+            Play Music
+          </Button>
+        </div>
       )}
+
       {/* Header */}
       <header className="border-b bg-surface/95 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
