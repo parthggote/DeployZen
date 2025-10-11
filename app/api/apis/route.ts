@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "No file uploaded" }, { status: 400 });
     }
 
-    const uploadsDir = join(process.cwd(), "uploads");
+    const uploadsDir = join("/tmp", "uploads");
     try {
       await access(uploadsDir);
     } catch (error) {
