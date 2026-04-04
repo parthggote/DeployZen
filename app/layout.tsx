@@ -3,7 +3,6 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AudioProvider } from "./audio-context"
 
 // Configure fonts properly
 const inter = Inter({
@@ -47,9 +46,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} ${inter.variable} ${geistSans.variable} ${ibmPlexSerif.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AudioProvider>
-            {children}
-          </AudioProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>
