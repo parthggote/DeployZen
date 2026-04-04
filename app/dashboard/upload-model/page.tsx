@@ -1,35 +1,29 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useEffect, useRef, useState } from "react"
 import {
-  Upload,
-  Cpu,
+  AlertCircle,
   CheckCircle,
   Clock,
-  AlertCircle,
-  ExternalLink,
-  HardDrive,
-  Trash2,
-  TestTube,
-  Eye,
+  Cpu,
   Download,
-  Globe,
-  Plug,
-  Clipboard,
+  Eye,
+  HardDrive,
+  Upload,
   XCircle,
-  Key,
+  Trash2,
 } from "lucide-react"
+
 import { DragDropZone } from "@/components/drag-drop-zone"
 import { useToast } from "@/hooks/use-toast"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface ModelData {
   id: string
@@ -46,12 +40,11 @@ interface ModelData {
   size?: number
 }
 
-interface TestResult {
-  prompt: string
-  response: string
-  latency: number
-  timestamp: string
-}
+const deploymentModes = [
+  { value: "ollama", label: "Ollama (Local)", helper: "Best for local model runtimes with a straightforward deployment path." },
+  { value: "onnx", label: "ONNX Runtime (Local)", helper: "Use exported ONNX model assets for efficient inference workloads." },
+  { value: "huggingface", label: "Hugging Face", helper: "Reference a hosted model ID instead of uploading a binary artifact." },
+]
 
 export default function UploadModelPage() {
   const [isDeploying, setIsDeploying] = useState(false)
@@ -59,25 +52,13 @@ export default function UploadModelPage() {
   const [deploymentStatus, setDeploymentStatus] = useState("")
   const [models, setModels] = useState<ModelData[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [testResults, setTestResults] = useState<{ [key: string]: TestResult }>({})
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showLogsModal, setShowLogsModal] = useState(false)
   const [activityLogs, setActivityLogs] = useState("")
-  const { toast } = useToast()
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [hardwareSuggestion, setHardwareSuggestion] = useState<null | {
-    vram: string
-    ram: string
-    storage: string
-    cloud: string
-    warning?: string
-  }>(null)
-  const [endpointModal, setEndpointModal] = useState<{ open: boolean; modelId?: string; data?: { baseUrl: string; samplePaths: string[]; mode: string; modelName: string } }>({ open: false })
-  const [testingMap, setTestingMap] = useState<Record<string, "idle" | "loading" | "running" | "failed">>({})
-  const [apiKeysModal, setApiKeysModal] = useState<{ open: boolean; modelId?: string; modelName?: string; keys?: Array<{ keyId: string; prefix: string; createdAt: string; revokedAt?: string | null }>; createdKey?: { apiKey: string; keyId: string; prefix: string; createdAt: string } | null }>({ open: false })
+  const { toast } = useToast()
 
-  // Form state
   const [formData, setFormData] = useState({
     modelName: "",
     huggingFaceModelId: "",
@@ -93,26 +74,21 @@ export default function UploadModelPage() {
 
   useEffect(() => {
     loadModels()
-    loadActivityLogs()
 
     const startPolling = () => {
       if (pollingRef.current) return
       pollingRef.current = setInterval(() => {
-        if (document.hidden) return
-        loadModels()
+        if (!document.hidden) loadModels()
       }, 10000)
     }
 
     const stopPolling = () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
+      if (!pollingRef.current) return
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
     }
 
-    startPolling()
-
-    const onVisibility = () => {
+    const handleVisibility = () => {
       if (document.hidden) {
         stopPolling()
       } else {
@@ -121,11 +97,12 @@ export default function UploadModelPage() {
       }
     }
 
-    document.addEventListener("visibilitychange", onVisibility)
+    startPolling()
+    document.addEventListener("visibilitychange", handleVisibility)
 
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility)
       stopPolling()
+      document.removeEventListener("visibilitychange", handleVisibility)
     }
   }, [])
 
@@ -133,11 +110,9 @@ export default function UploadModelPage() {
     try {
       const response = await fetch("/api/models")
       const data = await response.json()
-
       if (data.success) {
         setModels(data.models || [])
       } else {
-        console.error("Failed to load models:", data.error)
         setModels([])
       }
     } catch (error) {
@@ -150,11 +125,9 @@ export default function UploadModelPage() {
     try {
       const response = await fetch("/api/models/logs")
       const data = await response.json()
-
       if (data.success) {
         setActivityLogs(data.logs || "No activity logs available.")
       } else {
-        console.error("Failed to load logs:", data.error)
         setActivityLogs("Failed to load activity logs. Please try again.")
       }
     } catch (error) {
@@ -163,73 +136,88 @@ export default function UploadModelPage() {
     }
   }
 
+  const openLogsModal = async () => {
+    setShowLogsModal(true)
+    await loadActivityLogs()
+  }
+
   const handleFileUpload = async () => {
     setUploadError(null)
     setUploading(true)
 
     if (!formData.modelName.trim()) {
-      alert("Please provide a model name")
+      setUploadError("Please provide a model name before starting deployment.")
       setUploading(false)
       return
     }
 
-    if (formData.mode !== 'huggingface' && !selectedFile) {
-      setUploadError("Please select a file for this deployment mode")
+    if (formData.mode !== "huggingface" && !selectedFile) {
+      setUploadError("Please select a model file for this deployment mode.")
       setUploading(false)
       return
     }
 
-    if (formData.mode === 'huggingface' && !formData.huggingFaceModelId.trim()) {
-        alert("Please provide a Hugging Face Model ID")
-        setUploading(false)
-        return
+    if (formData.mode === "huggingface" && !formData.huggingFaceModelId.trim()) {
+      setUploadError("Please provide a Hugging Face model ID.")
+      setUploading(false)
+      return
     }
 
     setIsDeploying(true)
-    setDeploymentProgress(0)
-    setDeploymentStatus("Uploading model...")
+    setDeploymentProgress(25)
+    setDeploymentStatus("Preparing deployment package")
 
     try {
-      const formDataToSend = new FormData()
+      const payload = new FormData()
 
-      if (formData.mode === 'huggingface') {
-        formDataToSend.append("huggingFaceModelId", formData.huggingFaceModelId);
+      if (formData.mode === "huggingface") {
+        payload.append("huggingFaceModelId", formData.huggingFaceModelId)
       } else if (selectedFile) {
-        formDataToSend.append("modelFile", selectedFile);
+        payload.append("modelFile", selectedFile)
       }
 
-      formDataToSend.append("modelName", formData.modelName)
-      formDataToSend.append("mode", formData.mode)
-      formDataToSend.append("tokens", formData.tokens.toString())
-      formDataToSend.append("batchSize", formData.batchSize.toString())
-      formDataToSend.append("threads", formData.threads.toString())
-      formDataToSend.append("nPredict", formData.nPredict.toString())
-      formDataToSend.append("streamMode", formData.streamMode.toString())
+      payload.append("modelName", formData.modelName)
+      payload.append("mode", formData.mode)
+      payload.append("tokens", formData.tokens.toString())
+      payload.append("batchSize", formData.batchSize.toString())
+      payload.append("threads", formData.threads.toString())
+      payload.append("nPredict", formData.nPredict.toString())
+      payload.append("streamMode", formData.streamMode.toString())
+
+      setDeploymentProgress(60)
+      setDeploymentStatus("Sending deployment request")
 
       const response = await fetch("/api/activity", {
         method: "POST",
-        body: formDataToSend,
+        body: payload,
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        await loadModels()
-        setShowUploadModal(false)
-        resetForm()
-        toast({ title: "Model deployment initiated!", description: `Model ${formData.modelName} is being deployed.` })
-      } else {
+      if (!response.ok) {
         const error = await response.json()
-        alert(`Deployment failed: ${error.error}`)
-        toast({ title: "Deployment failed", description: `Deployment failed: ${error.error}` })
+        setUploadError(error.error || "Deployment failed.")
+        toast({ title: "Deployment failed", description: error.error || "Deployment failed." })
+        return
       }
+
+      setDeploymentProgress(100)
+      setDeploymentStatus("Deployment request accepted")
+      await loadModels()
+      setShowUploadModal(false)
+      resetForm()
+      toast({
+        title: "Model deployment initiated",
+        description: `Model ${formData.modelName} is being deployed.`,
+      })
     } catch (error) {
       console.error("Deployment error:", error)
-      alert("Deployment failed. Please try again.")
+      setUploadError("Deployment failed. Please try again.")
       toast({ title: "Deployment failed", description: "Deployment failed. Please try again." })
     } finally {
-      setIsDeploying(false)
-      setDeploymentProgress(0)
-      setDeploymentStatus("")
+      setTimeout(() => {
+        setIsDeploying(false)
+        setDeploymentProgress(0)
+        setDeploymentStatus("")
+      }, 500)
       setUploading(false)
     }
   }
@@ -246,203 +234,306 @@ export default function UploadModelPage() {
       streamMode: true,
     })
     setSelectedFile(null)
+    setUploadError(null)
   }
 
-    const deleteModel = async (modelId: string) => {
+  const deleteModel = async (modelId: string) => {
     if (!confirm("Are you sure you want to delete this model?")) return
 
     try {
-      const response = await fetch(`/api/models/${modelId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        await loadModels()
-        toast({ title: "Model deleted", description: `Model ${modelId} deleted.` })
-      } else {
+      const response = await fetch(`/api/models/${modelId}`, { method: "DELETE" })
+      if (!response.ok) {
         const error = await response.json()
-        alert(`Delete failed: ${error.error}`)
-        toast({ title: "Delete failed", description: `Delete failed: ${error.error}` })
+        toast({ title: "Delete failed", description: error.error || "Delete failed." })
+        return
       }
-    } catch (error: any) {
+      await loadModels()
+      toast({ title: "Model deleted", description: `Model ${modelId} deleted.` })
+    } catch (error) {
       console.error("Delete error:", error)
-      alert("Delete failed. Please try again.")
       toast({ title: "Delete failed", description: "Delete failed. Please try again." })
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status: ModelData["status"]) => {
     switch (status) {
-      case "Running": return "bg-success text-success-foreground"
-      case "Pending": case "Initializing": return "bg-warning text-warning-foreground"
-      case "Failed": return "bg-error text-error-foreground"
-      case "Stopped": return "bg-muted text-muted-foreground"
-      default: return "bg-muted text-muted-foreground"
+      case "Running":
+        return "bg-success/10 text-success hover:bg-success/10"
+      case "Pending":
+      case "Initializing":
+        return "bg-warning/10 text-warning hover:bg-warning/10"
+      case "Failed":
+        return "bg-error/10 text-error hover:bg-error/10"
+      default:
+        return "bg-muted text-muted-foreground hover:bg-muted"
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: ModelData["status"]) => {
     switch (status) {
-      case "Running": return <CheckCircle className="w-3 h-3 mr-1" />
-      case "Pending": case "Initializing": return <Clock className="w-3 h-3 mr-1" />
-      case "Failed": return <AlertCircle className="w-3 h-3 mr-1" />
-      case "Stopped": return <XCircle className="w-3 h-3 mr-1" />
-      default: return <Clock className="w-3 h-3 mr-1" />
+      case "Running":
+        return <CheckCircle className="mr-1 h-3 w-3" />
+      case "Pending":
+      case "Initializing":
+        return <Clock className="mr-1 h-3 w-3" />
+      case "Failed":
+        return <AlertCircle className="mr-1 h-3 w-3" />
+      case "Stopped":
+        return <XCircle className="mr-1 h-3 w-3" />
+      default:
+        return <Clock className="mr-1 h-3 w-3" />
     }
   }
+
+  const runningModels = models.filter((model) => model.status === "Running").length
+  const pendingModels = models.filter((model) => model.status === "Pending" || model.status === "Initializing").length
+  const selectedModeMeta = deploymentModes.find((mode) => mode.value === formData.mode)
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Model Management</h1>
-          <p className="text-muted-foreground">Deploy and manage your LLM models.</p>
-        </div>
-        <div className="flex space-x-3">
-          <Button variant="outline" onClick={loadActivityLogs}>
-            <Eye className="w-4 h-4 mr-2" />
-            View Logs
-          </Button>
-
-          <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-            <DialogTrigger asChild>
-              <Button>
-                <Upload className="w-4 h-4 mr-2" />
-                Deploy New Model
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Deploy New Model</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-6 mt-4">
+    <div className="space-y-8">
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card className="border-border/70 bg-surface/80 shadow-sm">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-4">
+                <Badge variant="outline" className="w-fit rounded-full border-border/70 bg-background px-3 py-1">
+                  Model operations
+                </Badge>
                 <div className="space-y-2">
-                  <Label htmlFor="model-name">Model Name *</Label>
-                  <Input
-                    id="model-name"
-                    placeholder="e.g., my-custom-llama"
-                    value={formData.modelName}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, modelName: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Deployment Mode</Label>
-                  <Select
-                    value={formData.mode}
-                    onValueChange={(value: any) => setFormData((prev) => ({ ...prev, mode: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ollama">Ollama (Local)</SelectItem>
-                      <SelectItem value="onnx">ONNX Runtime (Local)</SelectItem>
-                      <SelectItem value="huggingface">Hugging Face</SelectItem>
-                      <SelectItem value="llama.cpp" disabled>llama.cpp (Not Supported)</SelectItem>
-                      <SelectItem value="torch" disabled>PyTorch/TorchServe (Not Supported)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.mode === 'huggingface' ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="hf-model-id">Hugging Face Model ID *</Label>
-                    <Input
-                      id="hf-model-id"
-                      placeholder="e.g., meta-llama/Llama-2-7b-chat-hf"
-                      value={formData.huggingFaceModelId}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, huggingFaceModelId: e.target.value }))}
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>Model File *</Label>
-                    <DragDropZone
-                      acceptedTypes=".gguf,.bin,.safetensors,.onnx,.pth,.pt"
-                      description="Upload .gguf, .bin, .safetensors, .onnx, or .pth/.pt files"
-                      onFileSelect={(files) => setSelectedFile(files[0])}
-                    />
-                    {selectedFile && (
-                        <p className="text-sm text-muted-foreground">
-                          Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)
-                        </p>
-                    )}
-                  </div>
-                )}
-
-
-                <div className="flex justify-end space-x-3">
-                  <Button variant="outline" onClick={() => setShowUploadModal(false)} disabled={isDeploying}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleFileUpload} disabled={isDeploying}>
-                    {isDeploying ? (
-                      <><Clock className="w-4 h-4 mr-2 animate-spin" /> Deploying...</>
-                    ) : (
-                      <><Cpu className="w-4 h-4 mr-2" /> Deploy Model</>
-                    )}
-                  </Button>
+                  <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Deploy and manage model runtimes from one cleaner workspace</h1>
+                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
+                    Keep model assets, runtime state, and operator logs together so deployment work feels more controlled
+                    and less fragmented.
+                  </p>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={openLogsModal}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  View logs
+                </Button>
+                <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+                  <DialogTrigger asChild>
+                    <Button className="rounded-full px-5">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Deploy new model
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-3xl border-border/70 bg-background">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-semibold tracking-tight">Create a new deployment</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6 pt-2">
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="model-name">Model name</Label>
+                          <Input
+                            id="model-name"
+                            placeholder="e.g. support-llama-v2"
+                            value={formData.modelName}
+                            onChange={(event) => setFormData((prev) => ({ ...prev, modelName: event.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Deployment mode</Label>
+                          <Select
+                            value={formData.mode}
+                            onValueChange={(value: ModelData["mode"]) => setFormData((prev) => ({ ...prev, mode: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                              <SelectItem value="onnx">ONNX Runtime (Local)</SelectItem>
+                              <SelectItem value="huggingface">Hugging Face</SelectItem>
+                              <SelectItem value="llama.cpp" disabled>
+                                llama.cpp (Not supported)
+                              </SelectItem>
+                              <SelectItem value="torch" disabled>
+                                PyTorch/TorchServe (Not supported)
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {selectedModeMeta ? <p className="text-xs leading-5 text-muted-foreground">{selectedModeMeta.helper}</p> : null}
+                        </div>
+                      </div>
 
-      <Card>
+                      {formData.mode === "huggingface" ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="hf-model-id">Hugging Face model ID</Label>
+                          <Input
+                            id="hf-model-id"
+                            placeholder="e.g. meta-llama/Llama-2-7b-chat-hf"
+                            value={formData.huggingFaceModelId}
+                            onChange={(event) =>
+                              setFormData((prev) => ({ ...prev, huggingFaceModelId: event.target.value }))
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Label>Model artifact</Label>
+                          <DragDropZone
+                            acceptedTypes=".gguf,.bin,.safetensors,.onnx,.pth,.pt"
+                            description="Upload .gguf, .bin, .safetensors, .onnx, or .pth/.pt files"
+                            onFileSelect={(files) => setSelectedFile(files[0])}
+                          />
+                          {selectedFile ? (
+                            <div className="rounded-2xl border border-border/70 bg-surface/70 p-4 text-sm">
+                              <div className="font-medium">{selectedFile.name}</div>
+                              <div className="text-muted-foreground">
+                                {(selectedFile.size / 1024 / 1024).toFixed(1)} MB ready for upload
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+
+                      {isDeploying ? (
+                        <div className="rounded-3xl border border-border/70 bg-surface/70 p-5">
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span>{deploymentStatus || "Starting deployment"}</span>
+                            <span>{deploymentProgress}%</span>
+                          </div>
+                          <Progress value={deploymentProgress} />
+                        </div>
+                      ) : null}
+
+                      {uploadError ? (
+                        <div className="rounded-2xl border border-error/30 bg-error/10 p-4 text-sm text-error">{uploadError}</div>
+                      ) : null}
+
+                      <div className="flex justify-end gap-3">
+                        <Button variant="outline" className="rounded-full" onClick={() => setShowUploadModal(false)} disabled={isDeploying}>
+                          Cancel
+                        </Button>
+                        <Button className="rounded-full px-5" onClick={handleFileUpload} disabled={isDeploying}>
+                          {isDeploying ? (
+                            <>
+                              <Clock className="mr-2 h-4 w-4 animate-spin" />
+                              Deploying
+                            </>
+                          ) : (
+                            <>
+                              <Cpu className="mr-2 h-4 w-4" />
+                              Start deployment
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
+          <CardContent className="grid h-full gap-4 p-6 md:p-8">
+            <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+              <p className="text-sm font-medium text-muted-foreground">Deployed models</p>
+              <p className="mt-2 text-3xl font-semibold tracking-tight">{models.length}</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+                <p className="text-sm font-medium text-muted-foreground">Running</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-success">{runningModels}</p>
+              </div>
+              <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+                <p className="text-sm font-medium text-muted-foreground">Pending</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-warning">{pendingModels}</p>
+              </div>
+            </div>
+            <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+              <p className="text-sm font-medium">Deployment note</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The refresh focuses on clearer status presentation and cleaner operator flow, while keeping the existing
+                deployment logic intact.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="border-border/70 bg-surface/80 shadow-sm">
         <CardHeader>
-          <CardTitle>Deployed Models</CardTitle>
+          <CardTitle className="text-xl font-semibold">Current deployments</CardTitle>
         </CardHeader>
         <CardContent>
           {uploading ? (
-            <div className="text-muted-foreground text-sm">Loading models...</div>
+            <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-10 text-center text-sm text-muted-foreground">
+              Loading models...
+            </div>
           ) : models.length === 0 ? (
-            <div className="text-muted-foreground text-sm">No models uploaded yet.</div>
+            <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
+              <Cpu className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+              <h3 className="text-lg font-medium">No models deployed yet</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Start a deployment to populate this workspace.</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
               {models.map((model) => (
-                <div key={model.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-surface-secondary rounded-lg flex items-center justify-center">
-                        <Cpu className="w-5 h-5" />
+                <div key={model.id} className="rounded-3xl border border-border/70 bg-background/80 p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="rounded-2xl bg-info/10 p-3">
+                        <Cpu className="h-5 w-5 text-info" />
                       </div>
-                      <div>
-                        <div className="font-medium">{model.modelName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {model.mode} • Created{" "}
-                          {new Date(model.createdAt).toLocaleDateString()}
-                        </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">{model.modelName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {model.mode} • Created {new Date(model.createdAt).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(model.status)}>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className={`rounded-full ${getStatusBadge(model.status)}`}>
                         {getStatusIcon(model.status)}
                         {model.status}
                       </Badge>
-                      {model.port && <Badge variant="outline">Port {model.port}</Badge>}
-                      {model.filePath && !model.filePath.startsWith("http") && (
-                        <a
-                          href={`/api/models/${model.id}/download`}
-                          download
-                          className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
-                          title="Download model file"
-                        >
-                          <Download className="w-4 h-4" /> Download
-                        </a>
-                      )}
+                      {model.port ? (
+                        <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                          Port {model.port}
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => deleteModel(model.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Tokens</p>
+                      <p className="mt-2 text-lg font-semibold">{model.tokens}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Batch size</p>
+                      <p className="mt-2 text-lg font-semibold">{model.batchSize}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Storage</p>
+                      <p className="mt-2 flex items-center gap-2 text-lg font-semibold">
+                        <HardDrive className="h-4 w-4 text-muted-foreground" />
+                        {model.size ? `${(model.size / 1024 / 1024).toFixed(0)} MB` : "Unknown"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Button size="sm" variant="outline" className="rounded-full" onClick={() => deleteModel(model.id)}>
+                      <Trash2 className="mr-2 h-4 w-4" />
                       Delete
                     </Button>
+                    {model.filePath && !model.filePath.startsWith("http") ? (
+                      <a
+                        href={`/api/models/${model.id}/download`}
+                        download
+                        className="inline-flex items-center rounded-full border border-border/70 bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-surface"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download artifact
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -450,6 +541,19 @@ export default function UploadModelPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={showLogsModal} onOpenChange={setShowLogsModal}>
+        <DialogContent className="max-w-4xl rounded-3xl border-border/70 bg-background">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold tracking-tight">Activity logs</DialogTitle>
+          </DialogHeader>
+          <div className="rounded-3xl border border-border/70 bg-surface/70 p-4">
+            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+              {activityLogs || "Loading logs..."}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
