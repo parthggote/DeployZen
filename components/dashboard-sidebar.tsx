@@ -31,8 +31,8 @@ export function DashboardSidebar() {
           {!collapsed && (
             <div className="flex items-center space-x-3">
               <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-br from-primary via-info to-primary rounded-lg flex items-center justify-center shadow-md ring-1 ring-primary/20">
-                  <Bot className="w-5 h-5 text-white" />
+                <div className="w-9 h-9 flex items-center justify-center">
+                  <img src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" alt="DeployZen" className="w-9 h-9 rounded-lg" />
                 </div>
                 <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full border border-background animate-pulse"></div>
               </div>
@@ -46,8 +46,8 @@ export function DashboardSidebar() {
           )}
           {collapsed && (
             <div className="relative mx-auto">
-              <div className="w-9 h-9 bg-gradient-to-br from-primary via-info to-primary rounded-lg flex items-center justify-center shadow-md ring-1 ring-primary/20">
-                <Bot className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 flex items-center justify-center">
+                <img src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" alt="DeployZen" className="w-9 h-9 rounded-lg" />
               </div>
               <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full border border-background animate-pulse"></div>
             </div>

@@ -17,8 +17,8 @@ export function DashboardHeader() {
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-success/20 to-info/20 rounded-lg flex items-center justify-center">
-              <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" alt="DeployZen" className="w-8 h-8 rounded-lg" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">Welcome back, Alex</h2>

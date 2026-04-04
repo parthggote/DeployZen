@@ -20,7 +20,7 @@ export default function Page() {
 
       <section className="px-6 text-center">
         <div className="mb-8 flex justify-center">
-          <img src="/logo.svg" alt="Platform Logo" className="w-20 h-20 drop-shadow-lg" />
+          <img src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" alt="DeployZen Logo" className="w-20 h-20 drop-shadow-lg rounded-lg" />
         </div>
 
         <h1 className="font-sd-glitch-robot text-white text-balance font-bold tracking-tight text-5xl drop-shadow-lg mb-8">

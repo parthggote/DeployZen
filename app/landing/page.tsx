@@ -10,22 +10,13 @@ import HeroSection from "@/components/HeroSection"
 import { useEffect, useRef, useState } from "react"
 import { useTheme } from "next-themes"
 
-// Reusable BotIcon component with consistent theming
-const BotIcon = ({ size = "w-6 h-6", className = "" }) => {
-  const { resolvedTheme } = useTheme();
-
-  // Use dark theme styling for both 'dark' and 'system' (when system is dark)
-  const isDarkMode = resolvedTheme === 'dark';
-
+// Reusable Logo component
+const LogoIcon = ({ size = "w-6 h-6", className = "" }) => {
   return (
-    <Bot
-      className={`${size} ${className}`}
-      style={{
-        color: isDarkMode ? '#4ade80' : '#000000', // green-400 in dark, black in light
-        background: isDarkMode ? 'transparent' : '#ffffff',
-        borderRadius: '6px',
-        padding: '2px'
-      }}
+    <img 
+      src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" 
+      alt="DeployZen" 
+      className={`${size} ${className} rounded-lg`}
     />
   );
 };
@@ -50,8 +41,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary via-info to-primary rounded-xl flex items-center justify-center shadow-lg ring-2 ring-primary/10">
-                <BotIcon size="w-6 h-6" />
+              <div className="w-10 h-10 flex items-center justify-center">
+                <LogoIcon size="w-10 h-10" />
               </div>
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full border-2 border-background animate-pulse"></div>
             </div>
@@ -213,8 +204,8 @@ export default function LandingPage() {
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-br from-primary via-info to-primary rounded-xl flex items-center justify-center shadow-lg">
-                    <BotIcon size="w-8 h-8" />
+                  <div className="w-10 h-10 flex items-center justify-center">
+                    <LogoIcon size="w-10 h-10" />
                   </div>
                   <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full border-2 border-background"></div>
                 </div>

@@ -23,21 +23,21 @@ export async function GET() {
     const itemsFromDb = await db.collection("kanban").find({}).toArray()
     const modelsFromDb = await db.collection("models").find({}).toArray()
 
-    const items = itemsFromDb.map(item => ({ ...item, id: item._id.toString() }));
-    const models = modelsFromDb.map(model => ({ ...model, id: model._id.toString() }));
+    const items = itemsFromDb.map((item: any) => ({ ...item, id: item._id.toString() }));
+    const models = modelsFromDb.map((model: any) => ({ ...model, id: model._id.toString() }));
 
     const enrichedItems = items.map((item: any) => {
       if (item.type === "model") {
-        const modelDetails = models.find(m => m.modelName.startsWith(item.title));
+        const modelDetails = models.find((m: any) => m.modelName?.startsWith(item.title));
         if (modelDetails) {
           return {
             ...item,
             modelDetails: {
               name: modelDetails.modelName,
               status: modelDetails.status ? modelDetails.status.toLowerCase() : "unknown",
-              latency: modelDetails.latency || Math.floor(Math.random() * 150) + 50,
-              tokensPerSec: modelDetails.tokensPerSec || Math.floor(Math.random() * 150) + 50,
-              requestsPerSec: modelDetails.requestsPerSec || Math.floor(Math.random() * 20) + 1,
+              latency: modelDetails.latency ?? null,
+              tokensPerSec: modelDetails.tokensPerSec ?? null,
+              requestsPerSec: modelDetails.requestsPerSec ?? null,
               gpu: modelDetails.gpu || "N/A",
               memory: modelDetails.size ? `${(modelDetails.size / 1024 / 1024).toFixed(2)} MB` : "N/A",
             },

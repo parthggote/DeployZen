@@ -188,6 +188,64 @@ export function getOnnxSession(modelId: string): any | undefined {
   return onnxSessions.get(modelId);
 }
 
+function inferActivityStatus(summary: string): "success" | "error" | "pending" {
+  const normalized = summary.toLowerCase()
+  if (
+    normalized.includes("failed") ||
+    normalized.includes("error") ||
+    normalized.includes("could not")
+  ) {
+    return "error"
+  }
+  if (
+    normalized.includes("initiated") ||
+    normalized.includes("initializing") ||
+    normalized.includes("pending")
+  ) {
+    return "pending"
+  }
+  return "success"
+}
+
+function inferActivityType(feature: string, summary: string): "upload" | "test" | "deployment" | "kanban" | "other" {
+  const featureValue = feature.toLowerCase()
+  const summaryValue = summary.toLowerCase()
+
+  if (featureValue.includes("kanban")) return "kanban"
+  if (summaryValue.includes("test")) return "test"
+  if (summaryValue.includes("upload")) return "upload"
+  if (featureValue.includes("model") || summaryValue.includes("deploy")) return "deployment"
+  return "other"
+}
+
+export async function GET() {
+  try {
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+    const logs = await db.collection("activity_log").find({}).sort({ timestamp: -1 }).limit(50).toArray()
+
+    const activities = logs.map((log: any) => {
+      const summary = log.summary || "No summary available"
+      const feature = log.feature || "Activity"
+      const timestamp = log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp)
+
+      return {
+        id: log._id?.toString?.() || `${feature}-${timestamp.toISOString()}`,
+        title: feature,
+        description: summary,
+        time: timestamp.toLocaleString(),
+        status: inferActivityStatus(summary),
+        type: inferActivityType(feature, summary),
+      }
+    })
+
+    return NextResponse.json({ success: true, activities })
+  } catch (error: any) {
+    console.error("Failed to load activity feed:", error)
+    return NextResponse.json({ success: false, error: "Failed to load activity feed", activities: [] }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   console.log("POST /api/activity called");
   try {

@@ -85,7 +85,6 @@ export default function UploadAPIPage() {
           totalTests: 0,
           passedTests: 0,
           failedTests: 0,
-          securityAnalysis: result.securityAnalysis, // <-- ensure this is set
         })
         alert("API uploaded successfully!")
       } else {
@@ -491,7 +490,7 @@ export default function UploadAPIPage() {
           )}
 
           {/* Security Analysis Section */}
-          {uploadedApi && uploadedApi.securityAnalysis && (
+          {uploadedApi?.securityAnalysis && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -502,7 +501,7 @@ export default function UploadAPIPage() {
                     variant="ghost"
                     className="ml-2"
                     title="Copy to clipboard"
-                    onClick={() => handleCopyAnalysis(uploadedApi.securityAnalysis)}
+                    onClick={() => uploadedApi.securityAnalysis && handleCopyAnalysis(uploadedApi.securityAnalysis)}
                   >
                     {copied ? <Check className="w-4 h-4 text-success" /> : <Clipboard className="w-4 h-4" />}
                   </Button>
@@ -511,7 +510,7 @@ export default function UploadAPIPage() {
                     variant="ghost"
                     className="ml-1"
                     title="Export as Markdown"
-                    onClick={() => handleExportMarkdown(uploadedApi.securityAnalysis)}
+                    onClick={() => uploadedApi.securityAnalysis && handleExportMarkdown(uploadedApi.securityAnalysis)}
                   >
                     {exported ? <Check className="w-4 h-4 text-success" /> : <FileText className="w-4 h-4" />}
                   </Button>

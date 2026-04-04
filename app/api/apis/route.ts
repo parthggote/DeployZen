@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       name: file.name.replace(/\.[^/.]+$/, ""),
       description,
       filePath,
+      content: fileContents,
       fileName: file.name,
       fileSize: file.size,
       testCases: [],

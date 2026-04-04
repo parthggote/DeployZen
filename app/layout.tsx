@@ -23,7 +23,12 @@ const ibmPlexSerif = {
 export const metadata: Metadata = {
   title: "DeployZen - AI-Powered Testing and LLM Deployment",
   description: "AI-Powered Testing and LLM Deployment Assistant",
-    generator: 'v0.dev'
+  generator: 'v0.dev',
+  icons: {
+    icon: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
+    shortcut: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
+    apple: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
+  },
 }
 
 export default function RootLayout({
@@ -37,6 +42,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+        <link rel="icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" type="image/png" />
+        <link rel="shortcut icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" />
       </head>
       <body className={`${inter.className} ${inter.variable} ${geistSans.variable} ${ibmPlexSerif.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

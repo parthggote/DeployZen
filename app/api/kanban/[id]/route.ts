@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
     }
 
-    const updatedDoc = { ...result, id: result._id.toString() };
+    const updatedDoc = { ...(result as any), id: result._id.toString() };
 
     await logActivity(`Updated kanban item '${updatedDoc.title || id}' (column: '${updatedDoc.status}')`)
 
