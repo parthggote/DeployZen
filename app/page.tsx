@@ -2,14 +2,11 @@
 
 import { GradientBackground } from "@/components/gradient-background"
 import { useRouter } from "next/navigation"
-import { useAudio } from "./audio-context"
 
 export default function Page() {
   const router = useRouter()
-  const { play } = useAudio()
 
   const handleClick = () => {
-    play()
     router.push("/landing")
   }
 
