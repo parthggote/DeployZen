@@ -9,15 +9,16 @@ import {
   Cpu,
   RefreshCw,
   Server,
-  ShieldCheck,
   TrendingUp,
 } from "lucide-react"
 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getModelStatusStyle } from "@/lib/status-styles"
+import logger from "@/lib/logger"
 
 interface ModelData {
   id: string
@@ -37,7 +38,11 @@ export default function MonitoringPage() {
   const [models, setModels] = useState<ModelData[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [expandedModel, setExpandedModel] = useState<string | null>(null)
 
+  /**
+   * Loads all deployed models from the API
+   */
   const loadModels = async () => {
     try {
       const response = await fetch("/api/models")
@@ -46,13 +51,16 @@ export default function MonitoringPage() {
         setModels(data.models || [])
       }
     } catch (error) {
-      console.error("Error loading models:", error)
+      logger.error("Failed to load models", { error: error instanceof Error ? error.message : String(error) })
       setModels([])
     } finally {
       setLoading(false)
     }
   }
 
+  /**
+   * Manually refreshes the model list
+   */
   const handleRefresh = async () => {
     setRefreshing(true)
     await loadModels()
@@ -65,179 +73,135 @@ export default function MonitoringPage() {
     return () => clearInterval(interval)
   }, [])
 
-  const runningModels = models.filter((model) => model.status === "Running")
-  const pendingModels = models.filter((model) => model.status === "Pending" || model.status === "Initializing")
-  const failedModels = models.filter((model) => model.status === "Failed")
-  const modelsWithPorts = models.filter((model) => model.port).length
+  const runningModels = models.filter((m) => m.status === "Running")
+  const pendingModels = models.filter((m) => m.status === "Pending" || m.status === "Initializing")
+  const failedModels = models.filter((m) => m.status === "Failed")
+  const modelsWithPorts = models.filter((m) => m.port).length
+  const modelsWithActivity = models.filter((m) => m.lastActivity).length
 
   const statusBlocks = [
-    {
-      label: "Running runtimes",
-      value: runningModels.length,
-      helper: runningModels.length ? "Actively serving or ready" : "No active runtimes",
-      icon: CheckCircle,
-      tone: "text-success",
-      surface: "bg-success/10",
-    },
-    {
-      label: "Pending review",
-      value: pendingModels.length,
-      helper: pendingModels.length ? "Still initializing or waiting" : "No pending runtimes",
-      icon: Clock,
-      tone: "text-warning",
-      surface: "bg-warning/10",
-    },
-    {
-      label: "Network endpoints",
-      value: modelsWithPorts,
-      helper: "Models exposing a reachable port",
-      icon: TrendingUp,
-      tone: "text-info",
-      surface: "bg-info/10",
-    },
+    { label: "Running", value: runningModels.length, icon: CheckCircle, tone: "text-success", surface: "bg-success/10" },
+    { label: "Pending", value: pendingModels.length, icon: Clock, tone: "text-warning", surface: "bg-warning/10" },
+    { label: "Endpoints", value: modelsWithPorts, icon: TrendingUp, tone: "text-info", surface: "bg-info/10" },
   ]
 
-  const getStatusBadge = (status: ModelData["status"]) => {
-    switch (status) {
-      case "Running":
-        return "bg-success/10 text-success hover:bg-success/10"
-      case "Pending":
-      case "Initializing":
-        return "bg-warning/10 text-warning hover:bg-warning/10"
-      case "Failed":
-        return "bg-error/10 text-error hover:bg-error/10"
-      default:
-        return "bg-muted text-muted-foreground hover:bg-muted"
-    }
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-9 w-28 rounded-full" />
+        </div>
+        <section className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-border/60 bg-surface/80 p-5 space-y-3">
+              <Skeleton className="h-9 w-9 rounded-xl" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-8 w-12" />
+            </div>
+          ))}
+        </section>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-4">
-                <Badge variant="outline" className="w-fit rounded-full border-border/70 bg-background px-3 py-1">
-                  Monitoring workspace
-                </Badge>
-                <div className="space-y-2">
-                  <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Runtime monitor</h1>
-                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    Real deployment state without fabricated telemetry.
-                  </p>
-                </div>
-              </div>
-              <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                {refreshing ? "Refreshing" : "Refresh status"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="flex items-start gap-4">
-              <div className="rounded-3xl bg-primary/10 p-3">
-                <ShieldCheck className="h-6 w-6 text-primary" />
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Monitoring note</p>
-                <h2 className="text-xl font-medium tracking-tight">
-                  {loading ? "Loading runtime posture" : failedModels.length ? "Some runtimes need attention" : "Runtime posture looks steady"}
-                </h2>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {loading
-                    ? "Gathering current model state."
-                    : failedModels.length
-                      ? `${failedModels.length} model${failedModels.length === 1 ? "" : "s"} need review.`
-                      : "No failed model states reported."}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      {/* ── Compact header ── */}
+      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Runtime monitor</h1>
+          <p className="text-sm text-muted-foreground">Live deployment state and system signals.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {failedModels.length > 0 && (
+            <Badge variant="secondary" className="rounded-full bg-error/10 text-error">{failedModels.length} failed</Badge>
+          )}
+          <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`mr-2 icon-sm ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing" : "Refresh"}
+          </Button>
+        </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-3">
+      {/* ── Stat cards ── */}
+      <section className="grid gap-4 md:grid-cols-3">
         {statusBlocks.map((item) => (
-          <Card key={item.label} className="border-border/70 bg-surface/75 shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div className={`rounded-2xl p-3 ${item.surface}`}>
-                  <item.icon className={`h-5 w-5 ${item.tone}`} />
-                </div>
-                <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
-                  Snapshot
-                </Badge>
+          <div key={item.label} className="rounded-2xl border border-border/60 bg-surface/80 p-5">
+            <div className="mb-3">
+              <div className={`inline-flex rounded-xl p-2 ${item.surface}`}>
+                <item.icon className={`icon-sm ${item.tone}`} />
               </div>
-              <p className="text-sm font-medium text-muted-foreground">{item.label}</p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight">{item.value}</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.helper}</p>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight">{item.value}</p>
+          </div>
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      {/* ── Runtime inventory + System signals side-by-side ── */}
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Runtime inventory</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Runtime inventory</CardTitle>
           </CardHeader>
           <CardContent>
             {models.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
-                <Server className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="text-lg font-medium">No models deployed</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Deploy models to populate the monitoring workspace.</p>
+              <div className="flex h-[20rem] items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/70">
+                <div className="text-center">
+                  <Server className="mx-auto mb-3 icon-lg text-muted-foreground/50" />
+                  <h3 className="font-medium">No models deployed</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Deploy models to populate this view.</p>
+                </div>
               </div>
             ) : (
-              <ScrollArea className="max-h-[34rem] pr-4">
-                <Accordion type="multiple" defaultValue={models.slice(0, 1).map((model) => model.id)} className="w-full">
-                  {models.map((model) => (
-                    <AccordionItem
-                      key={model.id}
-                      value={model.id}
-                      className="mb-3 overflow-hidden rounded-3xl border border-border/70 bg-background/80 px-5 shadow-sm"
-                    >
-                      <AccordionTrigger className="py-5 text-left hover:no-underline">
-                        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                          <div className="flex items-start gap-4">
-                            <div className="rounded-2xl bg-info/10 p-3">
-                              <Cpu className="h-5 w-5 text-info" />
+              <ScrollArea className="h-[24rem]">
+                <div className="space-y-2 pr-3">
+                  {models.map((model) => {
+                    const isOpen = expandedModel === model.id
+                    return (
+                      <div key={model.id} className="overflow-hidden rounded-xl border border-border/70 bg-background/80">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-surface-secondary/50"
+                          onClick={() => setExpandedModel(isOpen ? null : model.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-lg bg-info/10 p-1.5">
+                              <Cpu className="icon-sm text-info" />
                             </div>
-                            <div className="space-y-1">
-                              <p className="font-semibold">{model.modelName}</p>
-                              <p className="text-sm font-normal text-muted-foreground">
-                                {model.mode} / Created {new Date(model.createdAt).toLocaleDateString()}
-                              </p>
+                            <div>
+                              <p className="text-sm font-medium">{model.modelName}</p>
+                              <p className="text-[11px] text-muted-foreground">{model.mode} · {new Date(model.createdAt).toLocaleDateString()}</p>
                             </div>
                           </div>
-                          <Badge className={`rounded-full ${getStatusBadge(model.status)}`}>{model.status}</Badge>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pt-1">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Port</p>
-                            <p className="mt-2 text-lg font-semibold">{model.port ?? "Not exposed"}</p>
+                          <Badge className={`rounded-full text-[10px] ${getModelStatusStyle(model.status)}`}>{model.status}</Badge>
+                        </button>
+
+                        {isOpen && (
+                          <div className="border-t border-border/60 px-4 pb-4 pt-3">
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Port</p>
+                                <p className="mt-1 text-sm font-semibold">{model.port ?? "Not exposed"}</p>
+                              </div>
+                              <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tokens</p>
+                                <p className="mt-1 text-sm font-semibold">{model.tokens}</p>
+                              </div>
+                              <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Last activity</p>
+                                <p className="mt-1 text-xs font-medium">
+                                  {model.lastActivity ? new Date(model.lastActivity).toLocaleString() : "No activity"}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Tokens</p>
-                            <p className="mt-2 text-lg font-semibold">{model.tokens}</p>
-                          </div>
-                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Last activity</p>
-                            <p className="mt-2 text-sm font-medium">
-                              {model.lastActivity ? new Date(model.lastActivity).toLocaleString() : "No activity recorded"}
-                            </p>
-                          </div>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </ScrollArea>
             )}
           </CardContent>
@@ -245,78 +209,61 @@ export default function MonitoringPage() {
 
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Monitoring notes</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">System signals</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Accordion type="multiple" defaultValue={["telemetry", "system"]} className="w-full">
-              <AccordionItem value="telemetry" className="border-border/60">
-                <AccordionTrigger className="py-5 text-left hover:no-underline">
-                  <div>
-                    <p className="text-base font-semibold">Telemetry availability</p>
-                    <p className="text-sm font-normal text-muted-foreground">Why some charts are absent</p>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4">
-                    <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                      <div className="flex items-start gap-3">
-                        <Activity className="mt-0.5 h-5 w-5 text-primary" />
-                        <div>
-                          <p className="font-medium">Live metrics are not yet backed by a persisted telemetry source</p>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            This page avoids inventing latency, throughput, or GPU numbers.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                        <p className="text-sm font-medium">Models with activity timestamps</p>
-                        <p className="mt-2 text-2xl font-semibold">{models.filter((model) => model.lastActivity).length}</p>
-                      </div>
-                      <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                        <p className="text-sm font-medium">Failed model states</p>
-                        <p className="mt-2 text-2xl font-semibold text-error">{failedModels.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
+          <CardContent className="space-y-5">
+            {/* Quick stats */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-border/60 bg-surface-secondary p-4">
+                <p className="text-xs text-muted-foreground">Models with activity</p>
+                <p className="mt-1 text-xl font-semibold">{modelsWithActivity}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-surface-secondary p-4">
+                <p className="text-xs text-muted-foreground">Failed states</p>
+                <p className="mt-1 text-xl font-semibold text-error">{failedModels.length}</p>
+              </div>
+            </div>
 
-              <AccordionItem value="system" className="border-border/60">
-                <AccordionTrigger className="py-5 text-left hover:no-underline">
-                  <div>
-                    <p className="text-base font-semibold">System posture</p>
-                    <p className="text-sm font-normal text-muted-foreground">Signals the workspace can verify</p>
+            {/* System posture checklist */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">System posture</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="icon-xs text-success" />
+                    <span className="text-sm">Deployment inventory</span>
                   </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-4 w-4 text-success" />
-                        <span className="text-sm font-medium">Deployment inventory</span>
-                      </div>
-                      <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Available</Badge>
-                    </div>
-                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <AlertCircle className="h-4 w-4 text-warning" />
-                        <span className="text-sm font-medium">Live telemetry pipeline</span>
-                      </div>
-                      <Badge className="rounded-full bg-warning/10 text-warning hover:bg-warning/10">Not configured</Badge>
-                    </div>
-                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-4 w-4 text-success" />
-                        <span className="text-sm font-medium">Runtime status polling</span>
-                      </div>
-                      <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Active</Badge>
-                    </div>
+                  <Badge className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] text-success hover:bg-success/10">Available</Badge>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="icon-xs text-warning" />
+                    <span className="text-sm">Live telemetry</span>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                  <Badge className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning hover:bg-warning/10">Not configured</Badge>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="icon-xs text-success" />
+                    <span className="text-sm">Status polling</span>
+                  </div>
+                  <Badge className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] text-success hover:bg-success/10">Active</Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Telemetry note */}
+            <div className="rounded-xl border border-border/60 bg-surface-secondary p-4">
+              <div className="flex items-start gap-2.5">
+                <Activity className="mt-0.5 icon-sm text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Telemetry not yet connected</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This page shows real deployment state. Latency and throughput metrics will appear once a telemetry pipeline is configured.
+                  </p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </section>

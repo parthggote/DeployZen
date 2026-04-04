@@ -1,3 +1,8 @@
+"use client"
+
+import { usePathname } from "next/navigation"
+import Link from "next/link"
+
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -10,14 +15,48 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Settings, LogOut, User } from "lucide-react"
+import { ChevronRight, Settings, LogOut, User } from "lucide-react"
 
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Workspace Home",
+  "/dashboard/upload-api": "API Test Lab",
+  "/dashboard/upload-model": "Model Deployments",
+  "/dashboard/monitoring": "Runtime Monitor",
+  "/dashboard/kanban": "Release Board",
+}
+
+/**
+ * Top header bar with breadcrumbs, theme toggle, and account menu
+ */
 export function DashboardHeader() {
+  const pathname = usePathname()
+  const pageTitle = PAGE_TITLES[pathname] ?? "Dashboard"
+  const isSubPage = pathname !== "/dashboard"
+
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
-      <div className="flex items-center justify-end gap-6 px-4 py-4 md:px-6">
+      <div className="flex items-center justify-between gap-4 px-4 py-3.5 md:px-6">
+        {/* Breadcrumbs */}
+        <nav className="flex items-center gap-1.5 text-sm pl-10 lg:pl-0">
+          <Link href="/dashboard" className="text-muted-foreground transition-colors hover:text-foreground">
+            DeployZen
+          </Link>
+          {isSubPage && (
+            <>
+              <ChevronRight className="icon-xs text-muted-foreground/60" />
+              <span className="font-medium text-foreground">{pageTitle}</span>
+            </>
+          )}
+          {!isSubPage && (
+            <>
+              <ChevronRight className="icon-xs text-muted-foreground/60" />
+              <span className="font-medium text-foreground">Home</span>
+            </>
+          )}
+        </nav>
+
         <div className="flex items-center space-x-2 md:space-x-3">
-          <div className="hidden rounded-full border border-border/70 bg-surface px-4 py-2 text-xs font-medium text-muted-foreground shadow-sm md:inline-flex">
+          <div className="hidden rounded-full border border-border/70 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm md:inline-flex">
             Live
           </div>
 
@@ -41,7 +80,7 @@ export function DashboardHeader() {
                     >
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="/placeholder-user.jpg" alt="User" />
-                        <AvatarFallback className="bg-gradient-to-br from-primary via-info to-success text-sm font-medium text-white">
+                        <AvatarFallback className="bg-primary text-sm font-medium text-primary-foreground">
                           DZ
                         </AvatarFallback>
                       </Avatar>
