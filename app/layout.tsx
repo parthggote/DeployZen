@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 // Configure fonts properly
 const inter = Inter({
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className={`${inter.className} ${inter.variable} ${geistSans.variable} ${ibmPlexSerif.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

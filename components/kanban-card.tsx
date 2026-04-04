@@ -1,15 +1,10 @@
 import type React from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { AlertCircle, CheckCircle, Clock, Cpu, FileCode, MoreHorizontal } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
-import { FileCode, Cpu, MoreHorizontal, CheckCircle, Clock, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { LiveChart } from "@/components/live-chart"
+import { Card, CardContent } from "@/components/ui/card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface KanbanCardProps {
   item: {
@@ -30,133 +25,112 @@ interface KanbanCardProps {
     }
   }
   statusIcon: React.ReactNode
-  onEdit?: (item: any) => void
-  onDelete?: (item: any) => void
+  onEdit?: (item: KanbanCardProps["item"]) => void
+  onDelete?: (item: KanbanCardProps["item"]) => void
 }
 
 export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardProps) {
   const { modelDetails } = item
 
-  const getStatusColor = (status: string) => {
+  function getModelStatusTone(status: string) {
     switch (status) {
       case "running":
-        return "bg-success text-success-foreground"
+        return "bg-success/10 text-success hover:bg-success/10"
       case "idle":
-        return "bg-warning text-warning-foreground"
+        return "bg-warning/10 text-warning hover:bg-warning/10"
       default:
-        return "bg-error text-error-foreground"
+        return "bg-error/10 text-error hover:bg-error/10"
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  function getModelStatusIcon(status: string) {
     switch (status) {
       case "running":
-        return <CheckCircle className="w-3 h-3 mr-1" />
+        return <CheckCircle className="mr-1 h-3 w-3" />
       case "idle":
-        return <Clock className="w-3 h-3 mr-1" />
+        return <Clock className="mr-1 h-3 w-3" />
       default:
-        return <AlertCircle className="w-3 h-3 mr-1" />
+        return <AlertCircle className="mr-1 h-3 w-3" />
     }
-  }
-
-  const generateData = () => {
-    const latency = modelDetails?.latency
-    if (modelDetails && modelDetails.status === "running" && latency !== null && latency !== undefined) {
-      return Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + latency - 10)
-    }
-    return [0, 0, 0, 0, 0, 0]
   }
 
   return (
-    <Card className="cursor-pointer hover:shadow-md transition-shadow bg-surface">
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-2">
-            {item.type === "api" ? (
-              <FileCode className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <Cpu className="w-4 h-4 text-muted-foreground" />
-            )}
-            <Badge variant="outline" className="text-xs">
-              {item.type.toUpperCase()}
+    <Card className="border-border/70 bg-background/90 shadow-sm transition-shadow hover:shadow-md">
+      <CardContent className="space-y-4 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="rounded-2xl bg-surface-secondary p-2">
+              {item.type === "api" ? (
+                <FileCode className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <Cpu className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+            <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.12em]">
+              {item.type}
             </Badge>
           </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <MoreHorizontal className="w-3 h-3" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit && onEdit(item)}>
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete && onDelete(item)} className="text-error">
+            <DropdownMenuContent align="end" className="rounded-2xl">
+              <DropdownMenuItem onClick={() => onEdit?.(item)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDelete?.(item)} className="text-error">
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        <div>
-          <h4 className="font-medium text-sm leading-tight">{item.title}</h4>
-          {item.type === "model" && modelDetails ? (
-            <div className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-muted-foreground">Latency</div>
-                  <div className="font-medium">{modelDetails.latency !== null ? `${modelDetails.latency}ms` : "No telemetry yet"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Tokens/sec</div>
-                  <div className="font-medium">{modelDetails.tokensPerSec !== null ? modelDetails.tokensPerSec : "No telemetry yet"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Requests/sec</div>
-                  <div className="font-medium">{modelDetails.requestsPerSec !== null ? modelDetails.requestsPerSec : "No telemetry yet"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">GPU</div>
-                  <div className="font-medium">{modelDetails.gpu}</div>
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">Performance</div>
-                <div className="h-16">
-                  <LiveChart
-                    data={generateData()}
-                    color={
-                      modelDetails.status === "running"
-                        ? "hsl(var(--success))"
-                        : modelDetails.status === "idle"
-                          ? "hsl(var(--warning))"
-                          : "hsl(var(--error))"
-                    }
-                    label="Latency"
-                  />
-                </div>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {modelDetails.latency === null && modelDetails.tokensPerSec === null && modelDetails.requestsPerSec === null
-                  ? "Telemetry will appear once real monitoring data is available."
-                  : `Memory: ${modelDetails.memory}`}
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
-          )}
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold leading-6">{item.title}</h4>
+          <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">
+            {item.description || "No description added yet."}
+          </p>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-1">
-            {statusIcon}
-            <span className="text-xs text-muted-foreground capitalize">{item.status}</span>
+        {item.type === "model" && modelDetails ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Latency</p>
+              <p className="mt-1 text-sm font-medium">
+                {modelDetails.latency !== null ? `${modelDetails.latency} ms` : "No telemetry yet"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Throughput</p>
+              <p className="mt-1 text-sm font-medium">
+                {modelDetails.tokensPerSec !== null ? `${modelDetails.tokensPerSec} tok/s` : "No telemetry yet"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Requests</p>
+              <p className="mt-1 text-sm font-medium">
+                {modelDetails.requestsPerSec !== null ? `${modelDetails.requestsPerSec}/s` : "No telemetry yet"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Runtime</p>
+              <p className="mt-1 text-sm font-medium">{modelDetails.gpu || modelDetails.memory || "Not reported"}</p>
+            </div>
           </div>
-          {item.type === 'model' && modelDetails ? (
-             <Badge className={getStatusColor(modelDetails.status)}>
-                {getStatusIcon(modelDetails.status)}
-                {modelDetails.status}
-              </Badge>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {statusIcon}
+            <span className="capitalize">{item.status}</span>
+          </div>
+
+          {item.type === "model" && modelDetails ? (
+            <Badge className={`rounded-full ${getModelStatusTone(modelDetails.status)}`}>
+              {getModelStatusIcon(modelDetails.status)}
+              {modelDetails.status}
+            </Badge>
           ) : (
             <span className="text-xs text-muted-foreground">{item.lastUpdated}</span>
           )}

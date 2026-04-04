@@ -130,9 +130,26 @@
     background: hsla(var(--primary), 0.18);
     color: hsl(var(--foreground));
   }
+
+  .lucide {
+    stroke-width: 1.85;
+  }
 }
 
 @layer utilities {
+  .icon-xs {
+    @apply h-3.5 w-3.5;
+  }
+  .icon-sm {
+    @apply h-4 w-4;
+  }
+  .icon-md {
+    @apply h-5 w-5;
+  }
+  .icon-lg {
+    @apply h-6 w-6;
+  }
+
   .text-success {
     color: hsl(var(--success));
   }

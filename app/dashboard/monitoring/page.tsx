@@ -13,9 +13,11 @@ import {
   TrendingUp,
 } from "lucide-react"
 
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface ModelData {
   id: string
@@ -120,10 +122,9 @@ export default function MonitoringPage() {
                   Monitoring workspace
                 </Badge>
                 <div className="space-y-2">
-                  <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Monitor runtime state with clearer, more honest signals</h1>
-                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-                    This view favors real deployment state over fabricated telemetry, so operators can see what the
-                    platform actually knows right now.
+                  <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Runtime monitor</h1>
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                    Real deployment state without fabricated telemetry.
                   </p>
                 </div>
               </div>
@@ -143,15 +144,15 @@ export default function MonitoringPage() {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Monitoring note</p>
-                <h2 className="text-2xl font-semibold tracking-tight">
+                <h2 className="text-xl font-medium tracking-tight">
                   {loading ? "Loading runtime posture" : failedModels.length ? "Some runtimes need attention" : "Runtime posture looks steady"}
                 </h2>
                 <p className="text-sm leading-6 text-muted-foreground">
                   {loading
                     ? "Gathering current model state."
                     : failedModels.length
-                      ? `${failedModels.length} model${failedModels.length === 1 ? "" : "s"} reported a failed state and should be reviewed.`
-                      : "No failed model states are currently reported."}
+                      ? `${failedModels.length} model${failedModels.length === 1 ? "" : "s"} need review.`
+                      : "No failed model states reported."}
                 </p>
               </div>
             </div>
@@ -182,7 +183,7 @@ export default function MonitoringPage() {
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold">Runtime inventory</CardTitle>
+            <CardTitle className="text-lg font-medium">Runtime inventory</CardTitle>
           </CardHeader>
           <CardContent>
             {models.length === 0 ? (
@@ -192,107 +193,132 @@ export default function MonitoringPage() {
                 <p className="mt-2 text-sm text-muted-foreground">Deploy models to populate the monitoring workspace.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {models.map((model) => (
-                  <div key={model.id} className="rounded-3xl border border-border/70 bg-background/80 p-5 shadow-sm">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="rounded-2xl bg-info/10 p-3">
-                          <Cpu className="h-5 w-5 text-info" />
+              <ScrollArea className="max-h-[34rem] pr-4">
+                <Accordion type="multiple" defaultValue={models.slice(0, 1).map((model) => model.id)} className="w-full">
+                  {models.map((model) => (
+                    <AccordionItem
+                      key={model.id}
+                      value={model.id}
+                      className="mb-3 overflow-hidden rounded-3xl border border-border/70 bg-background/80 px-5 shadow-sm"
+                    >
+                      <AccordionTrigger className="py-5 text-left hover:no-underline">
+                        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="flex items-start gap-4">
+                            <div className="rounded-2xl bg-info/10 p-3">
+                              <Cpu className="h-5 w-5 text-info" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-semibold">{model.modelName}</p>
+                              <p className="text-sm font-normal text-muted-foreground">
+                                {model.mode} / Created {new Date(model.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge className={`rounded-full ${getStatusBadge(model.status)}`}>{model.status}</Badge>
                         </div>
-                        <div className="space-y-1">
-                          <p className="font-semibold">{model.modelName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {model.mode} • Created {new Date(model.createdAt).toLocaleDateString()}
-                          </p>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-1">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Port</p>
+                            <p className="mt-2 text-lg font-semibold">{model.port ?? "Not exposed"}</p>
+                          </div>
+                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Tokens</p>
+                            <p className="mt-2 text-lg font-semibold">{model.tokens}</p>
+                          </div>
+                          <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Last activity</p>
+                            <p className="mt-2 text-sm font-medium">
+                              {model.lastActivity ? new Date(model.lastActivity).toLocaleString() : "No activity recorded"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <Badge className={`rounded-full ${getStatusBadge(model.status)}`}>{model.status}</Badge>
-                    </div>
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Port</p>
-                        <p className="mt-2 text-lg font-semibold">{model.port ?? "Not exposed"}</p>
-                      </div>
-                      <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Tokens</p>
-                        <p className="mt-2 text-lg font-semibold">{model.tokens}</p>
-                      </div>
-                      <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Last activity</p>
-                        <p className="mt-2 text-sm font-medium">
-                          {model.lastActivity ? new Date(model.lastActivity).toLocaleString() : "No activity recorded"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </ScrollArea>
             )}
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-semibold">Telemetry availability</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                <div className="flex items-start gap-3">
-                  <Activity className="mt-0.5 h-5 w-5 text-primary" />
+        <Card className="border-border/70 bg-surface/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium">Monitoring notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="multiple" defaultValue={["telemetry", "system"]} className="w-full">
+              <AccordionItem value="telemetry" className="border-border/60">
+                <AccordionTrigger className="py-5 text-left hover:no-underline">
                   <div>
-                    <p className="font-medium">Live metrics are not yet backed by a persisted telemetry source</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      This page now avoids inventing latency, throughput, or GPU numbers. When a real metrics pipeline is
-                      added, those widgets can be promoted back into the workspace.
-                    </p>
+                    <p className="text-base font-semibold">Telemetry availability</p>
+                    <p className="text-sm font-normal text-muted-foreground">Why some charts are absent</p>
                   </div>
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                  <p className="text-sm font-medium">Models with activity timestamps</p>
-                  <p className="mt-2 text-2xl font-semibold">{models.filter((model) => model.lastActivity).length}</p>
-                </div>
-                <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                  <p className="text-sm font-medium">Failed model states</p>
-                  <p className="mt-2 text-2xl font-semibold text-error">{failedModels.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4">
+                    <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+                      <div className="flex items-start gap-3">
+                        <Activity className="mt-0.5 h-5 w-5 text-primary" />
+                        <div>
+                          <p className="font-medium">Live metrics are not yet backed by a persisted telemetry source</p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            This page avoids inventing latency, throughput, or GPU numbers.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+                        <p className="text-sm font-medium">Models with activity timestamps</p>
+                        <p className="mt-2 text-2xl font-semibold">{models.filter((model) => model.lastActivity).length}</p>
+                      </div>
+                      <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
+                        <p className="text-sm font-medium">Failed model states</p>
+                        <p className="mt-2 text-2xl font-semibold text-error">{failedModels.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
 
-          <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-semibold">System posture</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-4 w-4 text-success" />
-                  <span className="text-sm font-medium">Deployment inventory</span>
-                </div>
-                <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Available</Badge>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="h-4 w-4 text-warning" />
-                  <span className="text-sm font-medium">Live telemetry pipeline</span>
-                </div>
-                <Badge className="rounded-full bg-warning/10 text-warning hover:bg-warning/10">Not configured</Badge>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-4 w-4 text-success" />
-                  <span className="text-sm font-medium">Runtime status polling</span>
-                </div>
-                <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Active</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              <AccordionItem value="system" className="border-border/60">
+                <AccordionTrigger className="py-5 text-left hover:no-underline">
+                  <div>
+                    <p className="text-base font-semibold">System posture</p>
+                    <p className="text-sm font-normal text-muted-foreground">Signals the workspace can verify</p>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-4 w-4 text-success" />
+                        <span className="text-sm font-medium">Deployment inventory</span>
+                      </div>
+                      <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Available</Badge>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <AlertCircle className="h-4 w-4 text-warning" />
+                        <span className="text-sm font-medium">Live telemetry pipeline</span>
+                      </div>
+                      <Badge className="rounded-full bg-warning/10 text-warning hover:bg-warning/10">Not configured</Badge>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-4 w-4 text-success" />
+                        <span className="text-sm font-medium">Runtime status polling</span>
+                      </div>
+                      <Badge className="rounded-full bg-success/10 text-success hover:bg-success/10">Active</Badge>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
       </section>
     </div>
   )

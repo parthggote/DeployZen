@@ -15,9 +15,11 @@ import {
 
 import { RecentActivity } from "@/components/recent-activity"
 import { StatsChart } from "@/components/stats-chart"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface ModelData {
   id: string
@@ -101,22 +103,10 @@ export default function DashboardPage() {
   const successRate = completedTests > 0 ? (passedTests / completedTests) * 100 : 0
 
   const statValues = [
-    {
-      value: totalApis,
-      detail: totalApis > 0 ? `${completedTests} checks recorded` : "No APIs uploaded yet",
-    },
-    {
-      value: totalModels,
-      detail: runningModels > 0 ? `${runningModels} live right now` : "No active model runtimes",
-    },
-    {
-      value: `${successRate.toFixed(1)}%`,
-      detail: `${passedTests} passed and ${failedTests} failed`,
-    },
-    {
-      value: completedTests,
-      detail: completedTests > 0 ? "Static validation and test runs completed" : "No checks executed yet",
-    },
+    { value: totalApis, detail: totalApis > 0 ? `${completedTests} checks recorded` : "No APIs uploaded yet" },
+    { value: totalModels, detail: runningModels > 0 ? `${runningModels} live right now` : "No active model runtimes" },
+    { value: `${successRate.toFixed(1)}%`, detail: `${passedTests} passed and ${failedTests} failed` },
+    { value: completedTests, detail: completedTests > 0 ? "Static validation and test runs completed" : "No checks executed yet" },
   ]
 
   return (
@@ -124,17 +114,22 @@ export default function DashboardPage() {
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardContent className="p-6 md:p-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-4">
-                <Badge variant="outline" className="w-fit rounded-full border-border/70 bg-background px-3 py-1">
-                  Operations overview
-                </Badge>
-                <div className="space-y-2">
-                  <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">A calmer view of your deployment workspace</h1>
-                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-                    Review API quality, model status, and recent validation activity from a cleaner surface built to reduce
-                    noise and highlight the state that actually matters.
-                  </p>
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                    Overview
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
+                    {totalApis} APIs
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
+                    {totalModels} models
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Workspace overview</h1>
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">APIs, models, and recent runs.</p>
                 </div>
               </div>
               <Button onClick={handleRefresh} disabled={refreshing} className="rounded-full px-5">
@@ -148,20 +143,20 @@ export default function DashboardPage() {
         <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
           <CardContent className="p-6 md:p-8">
             <div className="flex items-start gap-4">
-              <div className="rounded-3xl bg-success/10 p-3">
-                <ShieldCheck className="h-6 w-6 text-success" />
+              <div className="rounded-2xl bg-success/10 p-3">
+                <ShieldCheck className="icon-md text-success" />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Workspace health</p>
-                <h2 className="text-2xl font-semibold tracking-tight">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Workspace health</p>
+                <h2 className="text-xl font-medium tracking-tight">
                   {loading ? "Loading current posture" : failedTests > 0 ? "Review failures before rollout" : "Operational posture looks steady"}
                 </h2>
                 <p className="text-sm leading-6 text-muted-foreground">
                   {loading
-                    ? "Fetching API and model state."
+                    ? "Fetching workspace state."
                     : failedTests > 0
-                      ? `${failedTests} checks still need attention. Use the upload and kanban views to inspect next actions.`
-                      : "No critical issues surfaced in the latest workspace summary."}
+                      ? `${failedTests} checks still need attention.`
+                      : "No critical issues surfaced."}
                 </p>
               </div>
             </div>
@@ -175,14 +170,14 @@ export default function DashboardPage() {
             <CardContent className="p-6">
               <div className="mb-5 flex items-center justify-between">
                 <div className={`rounded-2xl p-3 ${style.surface}`}>
-                  <style.icon className={`h-5 w-5 ${style.tone}`} />
+                  <style.icon className={`icon-md ${style.tone}`} />
                 </div>
                 <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
                   Live
                 </Badge>
               </div>
-              <p className="text-sm font-medium text-muted-foreground">{style.title}</p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight">{statValues[index].value}</p>
+              <p className="text-sm text-muted-foreground">{style.title}</p>
+              <p className="mt-2 text-3xl font-medium tracking-tight">{statValues[index].value}</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{statValues[index].detail}</p>
             </CardContent>
           </Card>
@@ -192,7 +187,7 @@ export default function DashboardPage() {
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold">Performance overview</CardTitle>
+            <CardTitle className="text-lg font-medium">Performance overview</CardTitle>
           </CardHeader>
           <CardContent>
             <StatsChart />
@@ -201,7 +196,7 @@ export default function DashboardPage() {
 
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold">Recent activity</CardTitle>
+            <CardTitle className="text-lg font-medium">Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
             <RecentActivity />
@@ -209,113 +204,130 @@ export default function DashboardPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold">Deployed models</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {models.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
-                <Cpu className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="text-lg font-medium">No models deployed</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Deploy a model to begin tracking runtime state from this workspace.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {models.map((model) => (
-                  <div
-                    key={model.id}
-                    className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="rounded-2xl bg-info/10 p-3">
-                        <Cpu className="h-5 w-5 text-info" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">{model.modelName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {model.mode} • {model.tokens} tokens • Created {new Date(model.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        className={
-                          model.status === "Running"
-                            ? "rounded-full bg-success/10 text-success hover:bg-success/10"
-                            : model.status === "Pending"
-                              ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
-                              : "rounded-full bg-error/10 text-error hover:bg-error/10"
-                        }
-                      >
-                        {model.status === "Running" && <CheckCircle className="mr-1 h-3 w-3" />}
-                        {model.status === "Pending" && <Clock className="mr-1 h-3 w-3" />}
-                        {model.status === "Failed" && <XCircle className="mr-1 h-3 w-3" />}
-                        {model.status}
-                      </Badge>
-                      {model.port && (
-                        <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
-                          Port {model.port}
-                        </Badge>
-                      )}
-                    </div>
+      <Card className="border-border/70 bg-surface/80 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-medium">Workspace details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="multiple" defaultValue={["models", "apis"]} className="w-full">
+            <AccordionItem value="models" className="border-border/60">
+              <AccordionTrigger className="py-5 text-left hover:no-underline">
+                <div>
+                  <p className="text-base font-semibold">Deployed models</p>
+                  <p className="text-sm font-normal text-muted-foreground">{models.length} tracked</p>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {models.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
+                    <Cpu className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-lg font-medium">No models deployed</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">Deploy a model to begin tracking runtime state from this workspace.</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                ) : (
+                  <ScrollArea className="max-h-[26rem] pr-4">
+                    <div className="space-y-4">
+                      {models.map((model) => (
+                        <div
+                          key={model.id}
+                          className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="rounded-2xl bg-info/10 p-3">
+                              <Cpu className="h-5 w-5 text-info" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-semibold">{model.modelName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {model.mode} / {model.tokens} tokens / Created {new Date(model.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              className={
+                                model.status === "Running"
+                                  ? "rounded-full bg-success/10 text-success hover:bg-success/10"
+                                  : model.status === "Pending"
+                                    ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
+                                    : "rounded-full bg-error/10 text-error hover:bg-error/10"
+                              }
+                            >
+                              {model.status === "Running" && <CheckCircle className="mr-1 h-3 w-3" />}
+                              {model.status === "Pending" && <Clock className="mr-1 h-3 w-3" />}
+                              {model.status === "Failed" && <XCircle className="mr-1 h-3 w-3" />}
+                              {model.status}
+                            </Badge>
+                            {model.port ? (
+                              <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                                Port {model.port}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </AccordionContent>
+            </AccordionItem>
 
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold">Recent APIs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {apis.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
-                <CheckCircle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="text-lg font-medium">No APIs uploaded</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Upload an API to start generating structured test coverage.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {apis.slice(0, 5).map((api) => (
-                  <div
-                    key={api.id}
-                    className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="rounded-2xl bg-primary/10 p-3">
-                        <CheckCircle className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">{api.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {api.totalTests} checks • {api.passedTests} passed • {api.failedTests} failed
-                        </p>
-                      </div>
-                    </div>
-                    <Badge
-                      className={
-                        api.status === "completed"
-                          ? "rounded-full bg-success/10 text-success hover:bg-success/10"
-                          : api.status === "testing"
-                            ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
-                            : "rounded-full bg-muted text-muted-foreground hover:bg-muted"
-                      }
-                    >
-                      {api.status === "completed" && <CheckCircle className="mr-1 h-3 w-3" />}
-                      {(api.status === "testing" || api.status === "uploaded") && <Clock className="mr-1 h-3 w-3" />}
-                      {api.status}
-                    </Badge>
+            <AccordionItem value="apis" className="border-border/60">
+              <AccordionTrigger className="py-5 text-left hover:no-underline">
+                <div>
+                  <p className="text-base font-semibold">Recent APIs</p>
+                  <p className="text-sm font-normal text-muted-foreground">{apis.length} tracked</p>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {apis.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
+                    <CheckCircle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-lg font-medium">No APIs uploaded</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">Upload an API to start generating structured test coverage.</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                ) : (
+                  <ScrollArea className="max-h-[26rem] pr-4">
+                    <div className="space-y-4">
+                      {apis.map((api) => (
+                        <div
+                          key={api.id}
+                          className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="rounded-2xl bg-primary/10 p-3">
+                              <CheckCircle className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-semibold">{api.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {api.totalTests} checks / {api.passedTests} passed / {api.failedTests} failed
+                              </p>
+                            </div>
+                          </div>
+                          <Badge
+                            className={
+                              api.status === "completed"
+                                ? "rounded-full bg-success/10 text-success hover:bg-success/10"
+                                : api.status === "testing"
+                                  ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
+                                  : "rounded-full bg-muted text-muted-foreground hover:bg-muted"
+                            }
+                          >
+                            {api.status === "completed" && <CheckCircle className="mr-1 h-3 w-3" />}
+                            {(api.status === "testing" || api.status === "uploaded") && <Clock className="mr-1 h-3 w-3" />}
+                            {api.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
     </div>
   )
 }

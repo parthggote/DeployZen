@@ -7,11 +7,8 @@ import {
   AlertTriangle,
   Check,
   CheckCircle,
-  ChevronDown,
-  ChevronRight,
   Clipboard,
   Clock,
-  Eye,
   FileCode,
   FileText,
   Filter,
@@ -19,7 +16,6 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
-  Shield,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
@@ -29,10 +25,13 @@ import {
 } from "lucide-react"
 
 import { DragDropZone } from "@/components/drag-drop-zone"
+import { useToast } from "@/hooks/use-toast"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 
 type TestStatus = "pending" | "passed" | "failed" | "running"
@@ -95,6 +94,7 @@ const STATUS_OPTIONS: Array<{ label: string; value: TestStatus | "all" }> = [
 ]
 
 export default function UploadAPIPage() {
+  const { toast } = useToast()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExecuting, setIsExecuting] = useState(false)
   const [expandedTest, setExpandedTest] = useState<string | null>(null)
@@ -110,7 +110,6 @@ export default function UploadAPIPage() {
   const [reanalyzing, setReanalyzing] = useState(false)
   const [testStatusFilter, setTestStatusFilter] = useState<TestStatus | "all">("all")
   const [categoryFilter, setCategoryFilter] = useState<TestCategory | "all">("all")
-  const [showSourcePreview, setShowSourcePreview] = useState(true)
   const [executionMode, setExecutionMode] = useState<string | null>(null)
 
   async function handleSelectedFiles(files: File[]) {
@@ -125,7 +124,14 @@ export default function UploadAPIPage() {
   }
 
   const handleFileUpload = async () => {
-    if (!selectedFile) return alert("Please select a file first")
+    if (!selectedFile) {
+      toast({
+        title: "Select a file",
+        description: "Choose an API file before uploading.",
+        variant: "destructive",
+      })
+      return
+    }
     try {
       const formData = new FormData()
       formData.append("apiFile", selectedFile)
@@ -133,7 +139,12 @@ export default function UploadAPIPage() {
       const response = await fetch("/api/apis", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
-        return alert(`Upload failed: ${error.error}`)
+        toast({
+          title: "Upload failed",
+          description: error.error || "The API file could not be uploaded.",
+          variant: "destructive",
+        })
+        return
       }
       const result = await response.json()
       setUploadedApi({
@@ -152,14 +163,28 @@ export default function UploadAPIPage() {
         content: sourceCode,
       })
       setExecutionMode(null)
-      alert("API uploaded successfully!")
+      toast({
+        title: "API uploaded",
+        description: `${selectedFile.name} is ready for test generation.`,
+      })
     } catch {
-      alert("Upload failed. Please try again.")
+      toast({
+        title: "Upload failed",
+        description: "Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
   const handleGenerateTests = async () => {
-    if (!uploadedApi) return alert("Please upload an API first")
+    if (!uploadedApi) {
+      toast({
+        title: "Upload an API first",
+        description: "Add a source file before generating tests.",
+        variant: "destructive",
+      })
+      return
+    }
     setIsGenerating(true)
     setGenerationProgress(0)
     try {
@@ -175,7 +200,12 @@ export default function UploadAPIPage() {
       setGenerationProgress(100)
       if (!response.ok) {
         const error = await response.json()
-        return alert(`Test generation failed: ${error.error}`)
+        toast({
+          title: "Generation failed",
+          description: error.error || "Structured tests could not be generated.",
+          variant: "destructive",
+        })
+        return
       }
       const result = await response.json()
       setUploadedApi((prev) =>
@@ -184,8 +214,16 @@ export default function UploadAPIPage() {
           : null,
       )
       setExpandedTest(result.testCases[0]?.id || null)
+      toast({
+        title: "Tests generated",
+        description: `${result.testCases.length} structured checks are ready to review.`,
+      })
     } catch {
-      alert("Test generation failed. Please try again.")
+      toast({
+        title: "Generation failed",
+        description: "Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsGenerating(false)
       setGenerationProgress(0)
@@ -193,7 +231,14 @@ export default function UploadAPIPage() {
   }
 
   const handleExecuteTests = async (testIds?: string[]) => {
-    if (!uploadedApi || uploadedApi.testCases.length === 0) return alert("No tests to execute")
+    if (!uploadedApi || uploadedApi.testCases.length === 0) {
+      toast({
+        title: "No tests to run",
+        description: "Generate tests before starting validation.",
+        variant: "destructive",
+      })
+      return
+    }
     setIsExecuting(true)
     setExecutionProgress(0)
     try {
@@ -212,7 +257,12 @@ export default function UploadAPIPage() {
       setExecutionProgress(100)
       if (!response.ok) {
         const error = await response.json()
-        return alert(`Test execution failed: ${error.error}`)
+        toast({
+          title: "Validation failed",
+          description: error.error || "The generated tests could not be validated.",
+          variant: "destructive",
+        })
+        return
       }
       const result = await response.json()
       setUploadedApi((prev) =>
@@ -228,8 +278,16 @@ export default function UploadAPIPage() {
           : null,
       )
       setExecutionMode(result.mode || null)
+      toast({
+        title: "Validation completed",
+        description: `${result.summary.passed} passed, ${result.summary.failed} failed.`,
+      })
     } catch {
-      alert("Test execution failed. Please try again.")
+      toast({
+        title: "Validation failed",
+        description: "Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsExecuting(false)
       setExecutionProgress(0)
@@ -239,7 +297,13 @@ export default function UploadAPIPage() {
   const handleRunFailedOnly = async () => {
     if (!uploadedApi) return
     const failedIds = uploadedApi.testCases.filter((test) => test.status === "failed").map((test) => test.id)
-    if (!failedIds.length) return alert("There are no failed tests to rerun.")
+    if (!failedIds.length) {
+      toast({
+        title: "Nothing to rerun",
+        description: "There are no failed tests right now.",
+      })
+      return
+    }
     await handleExecuteTests(failedIds)
   }
 
@@ -255,6 +319,10 @@ export default function UploadAPIPage() {
   function handleCopyAnalysis(text: string) {
     navigator.clipboard.writeText(text)
     setCopied(true)
+    toast({
+      title: "Analysis copied",
+      description: "Security findings were copied to the clipboard.",
+    })
     setTimeout(() => setCopied(false), 1500)
   }
 
@@ -268,6 +336,10 @@ export default function UploadAPIPage() {
     anchor.click()
     document.body.removeChild(anchor)
     setExported(true)
+    toast({
+      title: "Markdown exported",
+      description: "Security findings were downloaded as Markdown.",
+    })
     setTimeout(() => setExported(false), 1500)
   }
 
@@ -311,6 +383,10 @@ export default function UploadAPIPage() {
       const data = await response.json()
       if (data.success && data.securityAnalysis) {
         setUploadedApi((prev) => (prev ? { ...prev, securityAnalysis: data.securityAnalysis } : prev))
+        toast({
+          title: "Analysis updated",
+          description: "Latest security findings are ready.",
+        })
       }
     } finally {
       setReanalyzing(false)
@@ -336,16 +412,20 @@ export default function UploadAPIPage() {
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardContent className="p-6 md:p-8">
-            <Badge variant="outline" className="mb-4 rounded-full border-border/70 bg-background px-3 py-1">API validation workspace</Badge>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Upload source, inspect code, and validate clearer contract coverage</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">The workflow keeps the uploaded code visible, groups core actions together, and makes structured test output easier to scan and trust.</p>
+            <Badge variant="outline" className="mb-4 rounded-full border-border/70 bg-background px-3 py-1">API validation</Badge>
+            <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Validate API contracts</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Upload source, generate checks, and review outcomes from one bounded workspace.
+            </p>
           </CardContent>
         </Card>
         <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
           <CardContent className="grid gap-4 p-6 md:p-8">
             <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
               <p className="text-sm font-medium text-muted-foreground">Selected file</p>
-              <p className="mt-2 break-all text-sm font-semibold">{selectedFile ? `${selectedFile.name} • ${(selectedFile.size / 1024).toFixed(1)} KB` : "No file selected"}</p>
+              <p className="mt-2 break-all text-sm font-semibold">
+                {selectedFile ? `${selectedFile.name} / ${(selectedFile.size / 1024).toFixed(1)} KB` : "No file selected"}
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-3xl border border-border/60 bg-background/80 p-5"><p className="text-sm text-muted-foreground">Generated tests</p><p className="mt-2 text-2xl font-semibold">{uploadedApi?.totalTests ?? 0}</p></div>
@@ -356,39 +436,127 @@ export default function UploadAPIPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <div className="space-y-6">
-          <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl font-semibold"><Upload className="h-5 w-5" />Upload source</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <DragDropZone acceptedTypes=".js,.ts,.py,.json,.yaml,.yml" description="Upload API files (JS, TS, Python, OpenAPI, or Swagger)" onFileSelect={handleSelectedFiles} />
-              {selectedFile ? (
-                <div className="flex items-center justify-between rounded-3xl border border-border/70 bg-background/80 p-4">
-                  <div className="flex items-center gap-3"><div className="rounded-2xl bg-primary/10 p-2.5"><FileCode className="h-4 w-4 text-primary" /></div><div><div className="font-medium">{selectedFile.name}</div><div className="text-sm text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB ready for analysis</div></div></div>
-                  <Button variant="ghost" size="icon" className="rounded-full" onClick={() => { setSelectedFile(null); setSourceCode("") }}><Trash2 className="h-4 w-4" /></Button>
-                </div>
+        <Card className="border-border/70 bg-surface/80 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-medium">Workspace panels</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="multiple" defaultValue={["upload", "source"]} className="w-full">
+              <AccordionItem value="upload" className="border-border/60">
+                <AccordionTrigger className="py-5 text-left hover:no-underline">
+                  <div>
+                    <p className="text-base font-semibold">Setup</p>
+                    <p className="text-sm font-normal text-muted-foreground">Source file and validation notes.</p>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-5">
+                    <DragDropZone
+                      acceptedTypes=".js,.ts,.py,.json,.yaml,.yml"
+                      description="Upload API files (JS, TS, Python, OpenAPI, or Swagger)"
+                      onFileSelect={handleSelectedFiles}
+                    />
+
+                    {selectedFile ? (
+                      <div className="flex items-center justify-between rounded-3xl border border-border/70 bg-background/80 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-2xl bg-primary/10 p-2.5">
+                            <FileCode className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{selectedFile.name}</div>
+                            <div className="text-sm text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB ready for analysis</div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="rounded-full"
+                          onClick={() => {
+                            setSelectedFile(null)
+                            setSourceCode("")
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <Textarea
+                      placeholder="Describe expected routes, auth requirements, validation rules, seed data, or coverage goals..."
+                      className="min-h-[140px] rounded-3xl border-border/70 bg-background/80"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+
+                    <Button onClick={handleFileUpload} disabled={!selectedFile} className="w-full rounded-full">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload API
+                    </Button>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="source" className="border-border/60">
+                <AccordionTrigger className="py-5 text-left hover:no-underline">
+                  <div>
+                    <p className="text-base font-semibold">Uploaded source</p>
+                    <p className="text-sm font-normal text-muted-foreground">Bounded code view.</p>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {sourceCode ? (
+                    <ScrollArea className="h-[26rem] rounded-3xl border border-border/70 bg-background/90">
+                      <pre className="whitespace-pre-wrap p-4 text-xs leading-6 text-muted-foreground">{sourceCode}</pre>
+                    </ScrollArea>
+                  ) : (
+                    <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-10 text-center text-sm text-muted-foreground">
+                      Upload a file to inspect the source here.
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              {uploadedApi?.securityAnalysis ? (
+                <AccordionItem value="security" className="border-border/60">
+                  <AccordionTrigger className="py-5 text-left hover:no-underline">
+                    <div>
+                      <p className="text-base font-semibold">Security analysis</p>
+                      <p className="text-sm font-normal text-muted-foreground">Saved findings.</p>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleCopyAnalysis(uploadedApi.securityAnalysis!)}>
+                          {copied ? <Check className="mr-2 h-4 w-4 text-success" /> : <Clipboard className="mr-2 h-4 w-4" />}
+                          Copy
+                        </Button>
+                        <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleExportMarkdown(uploadedApi.securityAnalysis!)}>
+                          {exported ? <Check className="mr-2 h-4 w-4 text-success" /> : <FileText className="mr-2 h-4 w-4" />}
+                          Export
+                        </Button>
+                        <Button size="sm" variant="outline" className="rounded-full" onClick={handleReanalyze} disabled={reanalyzing}>
+                          <RefreshCw className={`mr-2 h-4 w-4 ${reanalyzing ? "animate-spin" : ""}`} />
+                          Re-run analysis
+                        </Button>
+                      </div>
+
+                      <ScrollArea className="h-[20rem] rounded-3xl border border-border/70 bg-background/80">
+                        <div className="p-4">{renderSecurityAnalysis(cleanMarkdown(uploadedApi.securityAnalysis))}</div>
+                      </ScrollArea>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
               ) : null}
-              <Button onClick={handleFileUpload} disabled={!selectedFile} className="w-full rounded-full"><Upload className="mr-2 h-4 w-4" />Upload API</Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader><CardTitle className="text-xl font-semibold">Testing context</CardTitle></CardHeader>
-            <CardContent><Textarea placeholder="Describe expected routes, auth requirements, validation rules, seed data, or coverage goals..." className="min-h-[140px] rounded-3xl border-border/70 bg-background/80" value={description} onChange={(event) => setDescription(event.target.value)} /></CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between"><CardTitle className="flex items-center gap-2 text-xl font-semibold"><Eye className="h-5 w-5" />Uploaded source</CardTitle><Button variant="outline" size="sm" className="rounded-full" onClick={() => setShowSourcePreview((value) => !value)}>{showSourcePreview ? "Hide code" : "Show code"}</Button></CardHeader>
-            <CardContent>
-              {showSourcePreview ? (
-                sourceCode ? <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-3xl border border-border/70 bg-background/90 p-4 text-xs leading-6 text-muted-foreground">{sourceCode}</pre> : <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-10 text-center text-sm text-muted-foreground">Upload a file to inspect the source here.</div>
-              ) : <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-10 text-center text-sm text-muted-foreground">Source preview is collapsed.</div>}
-            </CardContent>
-          </Card>
-        </div>
+            </Accordion>
+          </CardContent>
+        </Card>
 
         <div className="space-y-6">
           <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader><CardTitle className="text-xl font-semibold">Actions</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg font-medium">Actions</CardTitle></CardHeader>
+
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button onClick={handleGenerateTests} disabled={isGenerating || !uploadedApi} className="rounded-full">{isGenerating ? <><Clock className="mr-2 h-4 w-4 animate-spin" />Generating</> : <><Sparkles className="mr-2 h-4 w-4" />Generate tests</>}</Button>
@@ -399,13 +567,35 @@ export default function UploadAPIPage() {
             </CardContent>
           </Card>
 
-          {isGenerating ? <Card className="border-border/70 bg-surface/80 shadow-sm"><CardHeader><CardTitle className="text-xl font-semibold">Generating structured test cases</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex items-center justify-between text-sm"><span>Parsing routes and coverage goals...</span><span>{generationProgress}%</span></div><Progress value={generationProgress} /><p className="text-sm leading-6 text-muted-foreground">The generator is turning your uploaded source into structured, reviewable contract tests instead of opaque code.</p></CardContent></Card> : null}
-          {isExecuting ? <Card className="border-border/70 bg-surface/80 shadow-sm"><CardHeader><CardTitle className="text-xl font-semibold">Validating generated contracts</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex items-center justify-between text-sm"><span>Checking generated tests against inferred API routes...</span><span>{executionProgress}%</span></div><Progress value={executionProgress} /><p className="text-sm leading-6 text-muted-foreground">Current execution uses static contract validation derived from the uploaded source.</p></CardContent></Card> : null}
-
-          {uploadedApi?.securityAnalysis ? (
+          {isGenerating ? (
             <Card className="border-border/70 bg-surface/80 shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2 text-xl font-semibold"><Shield className="h-5 w-5 text-info" />Security analysis<Button size="icon" variant="ghost" className="ml-auto rounded-full" onClick={() => handleCopyAnalysis(uploadedApi.securityAnalysis!)}>{copied ? <Check className="h-4 w-4 text-success" /> : <Clipboard className="h-4 w-4" />}</Button><Button size="icon" variant="ghost" className="rounded-full" onClick={() => handleExportMarkdown(uploadedApi.securityAnalysis!)}>{exported ? <Check className="h-4 w-4 text-success" /> : <FileText className="h-4 w-4" />}</Button><Button size="icon" variant="ghost" className="rounded-full" onClick={handleReanalyze} disabled={reanalyzing}><RefreshCw className={`h-4 w-4 ${reanalyzing ? "animate-spin" : ""}`} /></Button></CardTitle></CardHeader>
-              <CardContent><div className="rounded-3xl border border-border/70 bg-background/80 p-4">{renderSecurityAnalysis(cleanMarkdown(uploadedApi.securityAnalysis))}</div></CardContent>
+              <CardHeader>
+                <CardTitle className="text-lg font-medium">Generating structured test cases</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Parsing routes...</span>
+                  <span>{generationProgress}%</span>
+                </div>
+                <Progress value={generationProgress} />
+                <p className="text-sm leading-6 text-muted-foreground">Building structured checks from the uploaded source.</p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {isExecuting ? (
+            <Card className="border-border/70 bg-surface/80 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-medium">Validating generated contracts</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Validating inferred routes...</span>
+                  <span>{executionProgress}%</span>
+                </div>
+                <Progress value={executionProgress} />
+                <p className="text-sm leading-6 text-muted-foreground">Current execution uses static contract validation.</p>
+              </CardContent>
             </Card>
           ) : null}
         </div>
@@ -414,7 +604,7 @@ export default function UploadAPIPage() {
       {uploadedApi?.testCases.length ? (
         <>
           <Card className="border-border/70 bg-surface/80 shadow-sm">
-            <CardHeader><CardTitle className="text-xl font-semibold">Validation summary</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg font-medium">Validation summary</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-3xl border border-border/60 bg-background/80 p-5 text-center"><div className="text-3xl font-semibold text-success">{uploadedApi.passedTests}</div><div className="mt-1 text-sm text-muted-foreground">Passed</div></div>
@@ -429,48 +619,177 @@ export default function UploadAPIPage() {
           <Card className="border-border/70 bg-surface/80 shadow-sm">
             <CardHeader className="space-y-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <CardTitle className="text-xl font-semibold">Generated test cases</CardTitle>
-                <div className="flex flex-wrap gap-2">{CATEGORY_OPTIONS.map((option) => <Button key={option.value} variant={categoryFilter === option.value ? "default" : "outline"} size="sm" className="rounded-full" onClick={() => setCategoryFilter(option.value)}>{option.label}</Button>)}</div>
-              </div>
-              <div className="flex flex-wrap gap-2">{STATUS_OPTIONS.map((option) => <Button key={option.value} variant={testStatusFilter === option.value ? "default" : "outline"} size="sm" className="rounded-full" onClick={() => setTestStatusFilter(option.value)}>{option.label}</Button>)}</div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {filteredTests.map((test) => (
-                <div key={test.id} className="overflow-hidden rounded-3xl border border-border/70 bg-background/80 shadow-sm">
-                  <div className="cursor-pointer p-5 transition-colors hover:bg-surface/70" onClick={() => setExpandedTest(expandedTest === test.id ? null : test.id)}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        {expandedTest === test.id ? <ChevronDown className="mt-1 h-4 w-4" /> : <ChevronRight className="mt-1 h-4 w-4" />}
-                        <div className="space-y-3">
-                          <div><div className="font-medium">{test.name}</div><div className="text-sm text-muted-foreground">{test.description}</div></div>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">{test.method}</Badge>
-                            <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">{test.path}</Badge>
-                            <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">Expected {test.expectedStatus}</Badge>
-                            <Badge className={`rounded-full ${priorityClass(test.priority)}`}>{test.priority} priority</Badge>
-                            <Badge variant="secondary" className="rounded-full">{test.category}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                      <Badge className={`rounded-full ${statusClass(test.status)}`}>{test.status === "passed" ? <CheckCircle className="mr-1 h-3 w-3" /> : test.status === "failed" ? <XCircle className="mr-1 h-3 w-3" /> : <Clock className="mr-1 h-3 w-3" />}{test.status}</Badge>
-                    </div>
-                  </div>
-                  {expandedTest === test.id ? (
-                    <div className="space-y-5 border-t border-border/70 bg-surface/60 px-5 py-5">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div><div className="mb-2 text-sm font-medium">Headers</div><pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs">{JSON.stringify(test.headers || {}, null, 2)}</pre></div>
-                        <div><div className="mb-2 text-sm font-medium">Body / Query</div><pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs">{JSON.stringify({ query: test.query || {}, body: test.body || null }, null, 2)}</pre></div>
-                      </div>
-                      {test.expectedBodyShape?.length ? <div><div className="mb-2 text-sm font-medium">Expected body shape</div><div className="flex flex-wrap gap-2">{test.expectedBodyShape.map((field) => <Badge key={field} variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">{field}</Badge>)}</div></div> : null}
-                      {test.assumptions?.length ? <div><div className="mb-2 text-sm font-medium">Assumptions</div><ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">{test.assumptions.map((assumption, index) => <li key={`${test.id}-${index}`}>{assumption}</li>)}</ul></div> : null}
-                      <div><div className="mb-2 text-sm font-medium">Generated preview</div><pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs text-muted-foreground">{test.testCode}</pre></div>
-                      {test.result ? <div><div className="mb-2 text-sm font-medium">Validation result</div><div className="rounded-2xl border border-border/70 bg-background/90 p-3 text-sm whitespace-pre-line text-muted-foreground">{test.result}</div></div> : null}
-                      {test.error ? <div><div className="mb-2 text-sm font-medium text-error">Issue found</div><div className="rounded-2xl border border-error/30 bg-error/10 p-3 text-sm text-error">{test.error}</div></div> : null}
-                      {test.suggestion ? <div><div className="mb-2 text-sm font-medium text-info">Suggested next step</div><div className="rounded-2xl border border-info/30 bg-info/10 p-3 text-sm whitespace-pre-line text-info">{test.suggestion}</div>{!feedbackGiven[test.id] ? <div className="mt-3 flex items-center gap-2"><Button size="icon" variant="ghost" className="rounded-full" onClick={() => handleSuggestionFeedback(test.id, "up")}><ThumbsUp className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="rounded-full" onClick={() => handleSuggestionFeedback(test.id, "down")}><ThumbsDown className="h-4 w-4" /></Button><span className="text-xs text-muted-foreground">Was this suggestion helpful?</span></div> : <div className="mt-3 flex items-center gap-1 text-xs text-success"><Check className="h-4 w-4" />Thank you for your feedback!</div>}</div> : null}
-                    </div>
-                  ) : null}
+                <CardTitle className="text-lg font-medium">Generated test cases</CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      variant={categoryFilter === option.value ? "default" : "outline"}
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setCategoryFilter(option.value)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={testStatusFilter === option.value ? "default" : "outline"}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setTestStatusFilter(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredTests.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-10 text-center text-sm text-muted-foreground">
+                  No test cases match the current filters.
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[44rem] pr-4">
+                  <Accordion
+                    type="single"
+                    collapsible
+                    value={expandedTest ?? undefined}
+                    onValueChange={(value) => setExpandedTest(value || null)}
+                    className="w-full"
+                  >
+                    {filteredTests.map((test) => (
+                      <AccordionItem
+                        key={test.id}
+                        value={test.id}
+                        className="mb-3 overflow-hidden rounded-3xl border border-border/70 bg-background/80 px-5 shadow-sm"
+                      >
+                        <AccordionTrigger className="py-5 text-left hover:no-underline">
+                          <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-3">
+                              <div>
+                                <div className="font-medium">{test.name}</div>
+                                <div className="text-sm font-normal text-muted-foreground">{test.description}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                                  {test.method}
+                                </Badge>
+                                <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                                  {test.path}
+                                </Badge>
+                                <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                                  Expected {test.expectedStatus}
+                                </Badge>
+                                <Badge className={`rounded-full ${priorityClass(test.priority)}`}>{test.priority} priority</Badge>
+                                <Badge variant="secondary" className="rounded-full">{test.category}</Badge>
+                              </div>
+                            </div>
+                            <Badge className={`rounded-full ${statusClass(test.status)}`}>
+                              {test.status === "passed" ? (
+                                <CheckCircle className="mr-1 h-3 w-3" />
+                              ) : test.status === "failed" ? (
+                                <XCircle className="mr-1 h-3 w-3" />
+                              ) : (
+                                <Clock className="mr-1 h-3 w-3" />
+                              )}
+                              {test.status}
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-1">
+                          <div className="space-y-5">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div>
+                                <div className="mb-2 text-sm font-medium">Headers</div>
+                                <pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs">
+                                  {JSON.stringify(test.headers || {}, null, 2)}
+                                </pre>
+                              </div>
+                              <div>
+                                <div className="mb-2 text-sm font-medium">Body / Query</div>
+                                <pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs">
+                                  {JSON.stringify({ query: test.query || {}, body: test.body || null }, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                            {test.expectedBodyShape?.length ? (
+                              <div>
+                                <div className="mb-2 text-sm font-medium">Expected body shape</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {test.expectedBodyShape.map((field) => (
+                                    <Badge key={field} variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
+                                      {field}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {test.assumptions?.length ? (
+                              <div>
+                                <div className="mb-2 text-sm font-medium">Assumptions</div>
+                                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                                  {test.assumptions.map((assumption, index) => (
+                                    <li key={`${test.id}-${index}`}>{assumption}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            <div>
+                              <div className="mb-2 text-sm font-medium">Generated preview</div>
+                              <pre className="overflow-x-auto rounded-2xl border border-border/70 bg-background/90 p-3 text-xs text-muted-foreground">
+                                {test.testCode}
+                              </pre>
+                            </div>
+                            {test.result ? (
+                              <div>
+                                <div className="mb-2 text-sm font-medium">Validation result</div>
+                                <div className="rounded-2xl border border-border/70 bg-background/90 p-3 text-sm whitespace-pre-line text-muted-foreground">
+                                  {test.result}
+                                </div>
+                              </div>
+                            ) : null}
+                            {test.error ? (
+                              <div>
+                                <div className="mb-2 text-sm font-medium text-error">Issue found</div>
+                                <div className="rounded-2xl border border-error/30 bg-error/10 p-3 text-sm text-error">{test.error}</div>
+                              </div>
+                            ) : null}
+                            {test.suggestion ? (
+                              <div>
+                                <div className="mb-2 text-sm font-medium text-info">Suggested next step</div>
+                                <div className="rounded-2xl border border-info/30 bg-info/10 p-3 text-sm whitespace-pre-line text-info">
+                                  {test.suggestion}
+                                </div>
+                                {!feedbackGiven[test.id] ? (
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <Button size="icon" variant="ghost" className="rounded-full" onClick={() => handleSuggestionFeedback(test.id, "up")}>
+                                      <ThumbsUp className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="rounded-full" onClick={() => handleSuggestionFeedback(test.id, "down")}>
+                                      <ThumbsDown className="h-4 w-4" />
+                                    </Button>
+                                    <span className="text-xs text-muted-foreground">Was this suggestion helpful?</span>
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 flex items-center gap-1 text-xs text-success">
+                                    <Check className="h-4 w-4" />
+                                    Thank you for your feedback!
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </ScrollArea>
+              )}
             </CardContent>
           </Card>
         </>

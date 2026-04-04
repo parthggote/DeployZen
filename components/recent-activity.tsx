@@ -59,14 +59,14 @@ export function RecentActivity() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-2">
-        <ListFilter className="w-4 h-4 text-muted-foreground" />
+      <div className="mb-2 flex items-center gap-2">
+        <ListFilter className="icon-sm text-muted-foreground" />
         {FILTERS.map(f => (
           <Button
             key={f.value}
             size="sm"
             variant={filter === f.value ? "default" : "outline"}
-            className="text-xs px-2 py-1"
+            className="rounded-full px-3 text-xs"
             onClick={() => setFilter(f.value)}
           >
             {f.label}
@@ -97,7 +97,7 @@ export function RecentActivity() {
               }`}
             >
               <Icon
-                className={`w-4 h-4 ${
+                className={`icon-sm ${
                   activity.status === "success"
                     ? "text-success"
                     : activity.status === "error"
@@ -126,7 +126,7 @@ export function RecentActivity() {
                   {activity.status}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">{activity.description}</p>
+              <p className="line-clamp-2 text-sm text-muted-foreground">{activity.description}</p>
               <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
             </div>
           </div>
@@ -142,7 +142,7 @@ export function RecentActivity() {
               <div className="flex items-center gap-2">
                 {(() => {
                   const Icon = statusIconMap[selected.type] || statusIconMap[selected.status] || Clock
-                  return <Icon className="w-5 h-5" />
+                  return <Icon className="icon-md" />
                 })()}
                 <span className="font-semibold text-base">{selected.title}</span>
                 <Badge
