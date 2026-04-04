@@ -305,16 +305,16 @@ export default function KanbanPage() {
     switch (status) {
       case "to-test":
       case "pending":
-        return <Clock className="h-4 w-4 text-muted-foreground" />
+        return <Clock className="icon-sm text-muted-foreground" />
       case "in-progress":
       case "testing":
-        return <AlertCircle className="h-4 w-4 text-warning" />
+        return <AlertCircle className="icon-sm text-warning" />
       case "deployed":
-        return <CheckCircle className="h-4 w-4 text-success" />
+        return <CheckCircle className="icon-sm text-success" />
       case "failed":
-        return <XCircle className="h-4 w-4 text-error" />
+        return <XCircle className="icon-sm text-error" />
       default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />
+        return <Clock className="icon-sm text-muted-foreground" />
     }
   }
 
@@ -324,34 +324,31 @@ export default function KanbanPage() {
   const modelItems = columns.flatMap((column) => column.items).filter((item) => item.type === "model").length
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-4">
-                <Badge variant="outline" className="w-fit rounded-full border-border/70 bg-background px-3 py-1">
-                  Workflow board
-                </Badge>
-                <div className="space-y-2">
-                  <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Release board</h1>
-                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    Bounded columns and compact cards for API and model work.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
-                  <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                  {refreshing ? "Refreshing" : "Refresh board"}
-                </Button>
-                <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-                  <DialogTrigger asChild>
-                    <Button className="rounded-full px-5">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add item
-                    </Button>
-                  </DialogTrigger>
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Release board</h1>
+          <p className="text-sm text-muted-foreground">
+            Drag items across stages to track API and model work.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-4 rounded-full border border-border/60 bg-surface/80 px-4 py-2 text-sm">
+            <span className="text-muted-foreground">{totalItems} items</span>
+            <span className="text-success font-medium">{deployedItems} deployed</span>
+            {failedItems > 0 && <span className="text-error font-medium">{failedItems} failed</span>}
+          </div>
+          <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`mr-2 icon-sm ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing" : "Refresh"}
+          </Button>
+          <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full px-5">
+                <Plus className="mr-2 icon-sm" />
+                Add item
+              </Button>
+            </DialogTrigger>
                   <DialogContent className="max-w-2xl rounded-3xl border-border/70 bg-background">
                     <DialogHeader>
                       <DialogTitle className="text-xl font-medium tracking-tight">Create a board item</DialogTitle>
@@ -449,77 +446,9 @@ export default function KanbanPage() {
                       </div>
                     </form>
                   </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
-          <CardContent className="grid gap-4 p-6 md:p-8">
-            <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-              <p className="text-sm font-medium text-muted-foreground">Board items</p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight">{totalItems}</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                <p className="text-sm font-medium text-muted-foreground">Deployed</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-success">{deployedItems}</p>
-              </div>
-              <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                <p className="text-sm font-medium text-muted-foreground">Needs follow-up</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-error">{failedItems}</p>
-              </div>
-            </div>
-            <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-              <p className="text-sm font-medium">Model items</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {modelItems} model {modelItems === 1 ? "asset is" : "assets are"} currently being tracked alongside API work.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          </Dialog>
+        </div>
       </section>
-
-      <Card className="border-border/70 bg-surface/80 shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-medium">Board notes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Accordion type="multiple" className="w-full">
-            <AccordionItem value="workflow" className="border-border/60">
-              <AccordionTrigger className="py-5 text-left hover:no-underline">
-                <div>
-                  <p className="text-base font-semibold">Workflow guidance</p>
-                  <p className="text-sm font-normal text-muted-foreground">Short reminders for a tidy board</p>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                    <p className="text-sm font-medium">Keep titles short</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Use descriptions for detail so cards stay compact inside each stage.
-                    </p>
-                  </div>
-                  <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                    <p className="text-sm font-medium">Use the failed lane intentionally</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Treat it as a review queue, not a storage area for stale work.
-                    </p>
-                  </div>
-                  <div className="rounded-3xl border border-border/60 bg-background/80 p-5">
-                    <p className="text-sm font-medium">Scroll within columns</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Long boards stay contained because each column now has its own bounded scroll region.
-                    </p>
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </CardContent>
-      </Card>
 
       {loading ? (
         <Card className="border-border/70 bg-surface/80 shadow-sm">
@@ -579,7 +508,7 @@ export default function KanbanPage() {
                                   className={draggableSnapshot.isDragging ? "rotate-[0.4deg] shadow-lg" : ""}
                                 >
                                   <div {...draggableProvided.dragHandleProps} className="mb-2 flex items-center gap-2 px-1 text-xs text-muted-foreground">
-                                    <GripVertical className="h-3.5 w-3.5" />
+                                    <GripVertical className="icon-xs" />
                                     Drag to move
                                   </div>
                                   <KanbanCard
@@ -604,7 +533,7 @@ export default function KanbanPage() {
                           setForm((current) => ({ ...current, status: column.id }))
                         }}
                       >
-                        <Plus className="mr-2 h-4 w-4" />
+                        <Plus className="mr-2 icon-sm" />
                         Add to {column.title.toLowerCase()}
                       </Button>
                     </CardContent>

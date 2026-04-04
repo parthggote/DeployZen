@@ -46,11 +46,11 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
   function getModelStatusIcon(status: string) {
     switch (status) {
       case "running":
-        return <CheckCircle className="mr-1 h-3 w-3" />
+        return <CheckCircle className="mr-1 icon-xs" />
       case "idle":
-        return <Clock className="mr-1 h-3 w-3" />
+        return <Clock className="mr-1 icon-xs" />
       default:
-        return <AlertCircle className="mr-1 h-3 w-3" />
+        return <AlertCircle className="mr-1 icon-xs" />
     }
   }
 
@@ -61,9 +61,9 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
           <div className="flex items-center gap-2">
             <div className="rounded-2xl bg-surface-secondary p-2">
               {item.type === "api" ? (
-                <FileCode className="h-4 w-4 text-muted-foreground" />
+                <FileCode className="icon-sm text-muted-foreground" />
               ) : (
-                <Cpu className="h-4 w-4 text-muted-foreground" />
+                <Cpu className="icon-sm text-muted-foreground" />
               )}
             </div>
             <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.12em]">
@@ -74,7 +74,7 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                <MoreHorizontal className="h-4 w-4" />
+                <MoreHorizontal className="icon-sm" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="rounded-2xl">
@@ -95,25 +95,25 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
 
         {item.type === "model" && modelDetails ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+            <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Latency</p>
               <p className="mt-1 text-sm font-medium">
                 {modelDetails.latency !== null ? `${modelDetails.latency} ms` : "No telemetry yet"}
               </p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+            <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Throughput</p>
               <p className="mt-1 text-sm font-medium">
                 {modelDetails.tokensPerSec !== null ? `${modelDetails.tokensPerSec} tok/s` : "No telemetry yet"}
               </p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+            <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Requests</p>
               <p className="mt-1 text-sm font-medium">
                 {modelDetails.requestsPerSec !== null ? `${modelDetails.requestsPerSec}/s` : "No telemetry yet"}
               </p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-surface/70 p-3">
+            <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Runtime</p>
               <p className="mt-1 text-sm font-medium">{modelDetails.gpu || modelDetails.memory || "Not reported"}</p>
             </div>

@@ -1,25 +1,28 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import {
   CheckCircle,
   CheckCircle2,
   Clock,
   Cpu,
   RefreshCw,
-  ShieldCheck,
   TrendingUp,
   XCircle,
   Zap,
+  ArrowRight,
 } from "lucide-react"
 
 import { RecentActivity } from "@/components/recent-activity"
 import { StatsChart } from "@/components/stats-chart"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getModelStatusStyle, getTestStatusStyle } from "@/lib/status-styles"
+import logger from "@/lib/logger"
 
 interface ModelData {
   id: string
@@ -42,7 +45,7 @@ interface ApiData {
   filePath: string
   fileName: string
   fileSize: number
-  testCases: any[]
+  testCases: unknown[]
   status: "uploaded" | "testing" | "completed"
   createdAt: string
   lastTested?: string
@@ -64,6 +67,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  /**
+   * Fetches models and APIs concurrently to populate the dashboard
+   */
   const loadData = async () => {
     try {
       const [modelsResponse, apisResponse] = await Promise.all([fetch("/api/models"), fetch("/api/apis")])
@@ -78,12 +84,15 @@ export default function DashboardPage() {
         setApis(apisData.apis || [])
       }
     } catch (error) {
-      console.error("Error loading dashboard data:", error)
+      logger.error("Failed to load dashboard data", { error: error instanceof Error ? error.message : String(error) })
     } finally {
       setLoading(false)
     }
   }
 
+  /**
+   * Manually refreshes all dashboard data
+   */
   const handleRefresh = async () => {
     setRefreshing(true)
     await loadData()
@@ -96,98 +105,90 @@ export default function DashboardPage() {
 
   const totalApis = apis.length
   const totalModels = models.length
-  const runningModels = models.filter((model) => model.status === "Running").length
-  const completedTests = apis.reduce((sum, api) => sum + api.totalTests, 0)
-  const passedTests = apis.reduce((sum, api) => sum + api.passedTests, 0)
-  const failedTests = apis.reduce((sum, api) => sum + api.failedTests, 0)
+  const runningModels = models.filter((m) => m.status === "Running").length
+  const completedTests = apis.reduce((sum, a) => sum + a.totalTests, 0)
+  const passedTests = apis.reduce((sum, a) => sum + a.passedTests, 0)
+  const failedTests = apis.reduce((sum, a) => sum + a.failedTests, 0)
   const successRate = completedTests > 0 ? (passedTests / completedTests) * 100 : 0
 
   const statValues = [
     { value: totalApis, detail: totalApis > 0 ? `${completedTests} checks recorded` : "No APIs uploaded yet" },
-    { value: totalModels, detail: runningModels > 0 ? `${runningModels} live right now` : "No active model runtimes" },
-    { value: `${successRate.toFixed(1)}%`, detail: `${passedTests} passed and ${failedTests} failed` },
-    { value: completedTests, detail: completedTests > 0 ? "Static validation and test runs completed" : "No checks executed yet" },
+    { value: totalModels, detail: runningModels > 0 ? `${runningModels} live right now` : "No active runtimes" },
+    { value: `${successRate.toFixed(1)}%`, detail: `${passedTests} passed · ${failedTests} failed` },
+    { value: completedTests, detail: completedTests > 0 ? "Static + test runs completed" : "No checks executed yet" },
   ]
 
-  return (
-    <div className="space-y-8">
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
-                    Overview
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
-                    {totalApis} APIs
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
-                    {totalModels} models
-                  </Badge>
-                </div>
-                <div className="space-y-1">
-                  <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[2rem]">Workspace overview</h1>
-                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">APIs, models, and recent runs.</p>
-                </div>
-              </div>
-              <Button onClick={handleRefresh} disabled={refreshing} className="rounded-full px-5">
-                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                {refreshing ? "Refreshing" : "Refresh workspace"}
-              </Button>
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-9 w-28 rounded-full" />
+        </div>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-border/60 bg-surface/80 p-5 space-y-3">
+              <Skeleton className="h-9 w-9 rounded-xl" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-3 w-32" />
             </div>
-          </CardContent>
-        </Card>
+          ))}
+        </section>
+        <section className="grid gap-6 xl:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i} className="border-border/70 bg-surface/80 shadow-sm">
+              <CardContent className="p-5 space-y-3">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-48 w-full rounded-xl" />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      </div>
+    )
+  }
 
-        <Card className="border-border/70 bg-gradient-to-br from-background to-surface-secondary shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl bg-success/10 p-3">
-                <ShieldCheck className="icon-md text-success" />
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Workspace health</p>
-                <h2 className="text-xl font-medium tracking-tight">
-                  {loading ? "Loading current posture" : failedTests > 0 ? "Review failures before rollout" : "Operational posture looks steady"}
-                </h2>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {loading
-                    ? "Fetching workspace state."
-                    : failedTests > 0
-                      ? `${failedTests} checks still need attention.`
-                      : "No critical issues surfaced."}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+  return (
+    <div className="space-y-6">
+      {/* ── Compact header ── */}
+      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Workspace overview</h1>
+          <p className="text-sm text-muted-foreground">APIs, models, and recent runs at a glance.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {failedTests > 0 && (
+            <Badge variant="secondary" className="rounded-full bg-error/10 text-error">{failedTests} failed checks</Badge>
+          )}
+          <Button onClick={handleRefresh} disabled={refreshing} variant="outline" className="rounded-full border-border/70 bg-background/80">
+            <RefreshCw className={`mr-2 icon-sm ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing" : "Refresh"}
+          </Button>
+        </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      {/* ── Stat cards ── */}
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {statCardStyles.map((style, index) => (
-          <Card key={style.title} className="border-border/70 bg-surface/75 shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div className={`rounded-2xl p-3 ${style.surface}`}>
-                  <style.icon className={`icon-md ${style.tone}`} />
-                </div>
-                <Badge variant="secondary" className="rounded-full border border-border/60 bg-background px-3 py-1">
-                  Live
-                </Badge>
+          <div key={style.title} className="rounded-2xl border border-border/60 bg-surface/80 p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className={`rounded-xl p-2 ${style.surface}`}>
+                <style.icon className={`icon-sm ${style.tone}`} />
               </div>
-              <p className="text-sm text-muted-foreground">{style.title}</p>
-              <p className="mt-2 text-3xl font-medium tracking-tight">{statValues[index].value}</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{statValues[index].detail}</p>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-xs text-muted-foreground">{style.title}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight">{statValues[index].value}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{statValues[index].detail}</p>
+          </div>
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      {/* ── Chart + Activity side-by-side ── */}
+      <section className="grid gap-6 xl:grid-cols-2">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Performance overview</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Performance overview</CardTitle>
           </CardHeader>
           <CardContent>
             <StatsChart />
@@ -196,7 +197,7 @@ export default function DashboardPage() {
 
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Recent activity</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
             <RecentActivity />
@@ -204,130 +205,103 @@ export default function DashboardPage() {
         </Card>
       </section>
 
-      <Card className="border-border/70 bg-surface/80 shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-medium">Workspace details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Accordion type="multiple" defaultValue={["models", "apis"]} className="w-full">
-            <AccordionItem value="models" className="border-border/60">
-              <AccordionTrigger className="py-5 text-left hover:no-underline">
-                <div>
-                  <p className="text-base font-semibold">Deployed models</p>
-                  <p className="text-sm font-normal text-muted-foreground">{models.length} tracked</p>
+      {/* ── Models + APIs side-by-side, scrollable ── */}
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-border/70 bg-surface/80 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Deployed models</CardTitle>
+            <Link href="/dashboard/upload-model">
+              <Button variant="ghost" size="sm" className="h-7 rounded-full px-3 text-xs">
+                View all <ArrowRight className="ml-1 icon-xs" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {models.length === 0 ? (
+              <div className="flex h-[14rem] items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/70 text-sm text-muted-foreground">
+                <div className="text-center">
+                  <Cpu className="mx-auto mb-2 icon-md text-muted-foreground/60" />
+                  No models deployed
                 </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                {models.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
-                    <Cpu className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <h3 className="text-lg font-medium">No models deployed</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">Deploy a model to begin tracking runtime state from this workspace.</p>
-                  </div>
-                ) : (
-                  <ScrollArea className="max-h-[26rem] pr-4">
-                    <div className="space-y-4">
-                      {models.map((model) => (
-                        <div
-                          key={model.id}
-                          className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="flex items-start gap-4">
-                            <div className="rounded-2xl bg-info/10 p-3">
-                              <Cpu className="h-5 w-5 text-info" />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="font-semibold">{model.modelName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {model.mode} / {model.tokens} tokens / Created {new Date(model.createdAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              className={
-                                model.status === "Running"
-                                  ? "rounded-full bg-success/10 text-success hover:bg-success/10"
-                                  : model.status === "Pending"
-                                    ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
-                                    : "rounded-full bg-error/10 text-error hover:bg-error/10"
-                              }
-                            >
-                              {model.status === "Running" && <CheckCircle className="mr-1 h-3 w-3" />}
-                              {model.status === "Pending" && <Clock className="mr-1 h-3 w-3" />}
-                              {model.status === "Failed" && <XCircle className="mr-1 h-3 w-3" />}
-                              {model.status}
-                            </Badge>
-                            {model.port ? (
-                              <Badge variant="outline" className="rounded-full border-border/70 bg-background px-3 py-1">
-                                Port {model.port}
-                              </Badge>
-                            ) : null}
-                          </div>
+              </div>
+            ) : (
+              <ScrollArea className="h-[14rem]">
+                <div className="space-y-2 pr-3">
+                  {models.map((model) => (
+                    <div
+                      key={model.id}
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-background/80 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-info/10 p-1.5">
+                          <Cpu className="icon-xs text-info" />
                         </div>
-                      ))}
+                        <div>
+                          <p className="text-sm font-medium">{model.modelName}</p>
+                          <p className="text-[11px] text-muted-foreground">{model.mode} · {model.tokens} tokens</p>
+                        </div>
+                      </div>
+                      <Badge className={`rounded-full text-[10px] ${getModelStatusStyle(model.status)}`}>
+                        {model.status === "Running" && <CheckCircle className="mr-1 icon-xs" />}
+                        {model.status === "Pending" && <Clock className="mr-1 icon-xs" />}
+                        {model.status === "Failed" && <XCircle className="mr-1 icon-xs" />}
+                        {model.status}
+                      </Badge>
                     </div>
-                  </ScrollArea>
-                )}
-              </AccordionContent>
-            </AccordionItem>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
 
-            <AccordionItem value="apis" className="border-border/60">
-              <AccordionTrigger className="py-5 text-left hover:no-underline">
-                <div>
-                  <p className="text-base font-semibold">Recent APIs</p>
-                  <p className="text-sm font-normal text-muted-foreground">{apis.length} tracked</p>
+        <Card className="border-border/70 bg-surface/80 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Recent APIs</CardTitle>
+            <Link href="/dashboard/upload-api">
+              <Button variant="ghost" size="sm" className="h-7 rounded-full px-3 text-xs">
+                View all <ArrowRight className="ml-1 icon-xs" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {apis.length === 0 ? (
+              <div className="flex h-[14rem] items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/70 text-sm text-muted-foreground">
+                <div className="text-center">
+                  <CheckCircle className="mx-auto mb-2 icon-md text-muted-foreground/60" />
+                  No APIs uploaded
                 </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                {apis.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 py-12 text-center">
-                    <CheckCircle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <h3 className="text-lg font-medium">No APIs uploaded</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">Upload an API to start generating structured test coverage.</p>
-                  </div>
-                ) : (
-                  <ScrollArea className="max-h-[26rem] pr-4">
-                    <div className="space-y-4">
-                      {apis.map((api) => (
-                        <div
-                          key={api.id}
-                          className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 p-5 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="flex items-start gap-4">
-                            <div className="rounded-2xl bg-primary/10 p-3">
-                              <CheckCircle className="h-5 w-5 text-primary" />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="font-semibold">{api.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {api.totalTests} checks / {api.passedTests} passed / {api.failedTests} failed
-                              </p>
-                            </div>
-                          </div>
-                          <Badge
-                            className={
-                              api.status === "completed"
-                                ? "rounded-full bg-success/10 text-success hover:bg-success/10"
-                                : api.status === "testing"
-                                  ? "rounded-full bg-warning/10 text-warning hover:bg-warning/10"
-                                  : "rounded-full bg-muted text-muted-foreground hover:bg-muted"
-                            }
-                          >
-                            {api.status === "completed" && <CheckCircle className="mr-1 h-3 w-3" />}
-                            {(api.status === "testing" || api.status === "uploaded") && <Clock className="mr-1 h-3 w-3" />}
-                            {api.status}
-                          </Badge>
+              </div>
+            ) : (
+              <ScrollArea className="h-[14rem]">
+                <div className="space-y-2 pr-3">
+                  {apis.map((api) => (
+                    <div
+                      key={api.id}
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-background/80 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-primary/10 p-1.5">
+                          <CheckCircle className="icon-xs text-primary" />
                         </div>
-                      ))}
+                        <div>
+                          <p className="text-sm font-medium">{api.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{api.totalTests} checks · {api.passedTests} passed</p>
+                        </div>
+                      </div>
+                      <Badge className={`rounded-full text-[10px] ${getTestStatusStyle(api.status)}`}>
+                        {api.status === "completed" && <CheckCircle className="mr-1 icon-xs" />}
+                        {(api.status === "testing" || api.status === "uploaded") && <Clock className="mr-1 icon-xs" />}
+                        {api.status}
+                      </Badge>
                     </div>
-                  </ScrollArea>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </CardContent>
-      </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   )
 }
