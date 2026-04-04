@@ -1,43 +1,43 @@
-import React, { useRef } from 'react';
-import { motion, useInView } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import React, { useRef } from "react"
+import { motion, useInView, type Variants } from "framer-motion"
+import { ArrowRight } from "lucide-react"
+import { useTheme } from "next-themes"
 
 interface HeroSectionProps {
-  navbarHeight: number;
+  navbarHeight: number
 }
 
 const HeroSection: React.FC<HeroSectionProps> = ({ navbarHeight }) => {
-  const { resolvedTheme } = useTheme();
-  const isDarkMode = resolvedTheme === 'dark';
+  const { resolvedTheme } = useTheme()
+  const isDarkMode = resolvedTheme === "dark"
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isInView = useInView(containerRef, { once: true, amount: 0.5 });
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, amount: 0.5 })
 
-  const headingText = "AI-Powered Testing and LLM Deployment Assistant";
-  const words = headingText.split(' ');
+  const headingText = "AI-Powered Testing and LLM Deployment Assistant"
+  const words = headingText.split(" ")
 
   const generatePath = (i: number, position: number) => {
-    const x1 = 380 - i * 5 * position;
-    const y1 = -(189 + i * 6);
-    const x2 = 312 - i * 5 * position;
-    const y2 = 216 - i * 6;
-    const x3 = 152 - i * 5 * position;
-    const y3 = 343 - i * 6;
-    const x4 = 616 - i * 5 * position;
-    const y4 = 470 - i * 6;
-    const x5 = 684 - i * 5 * position;
-    const y5 = 875 - i * 6;
+    const x1 = 380 - i * 5 * position
+    const y1 = -(189 + i * 6)
+    const x2 = 312 - i * 5 * position
+    const y2 = 216 - i * 6
+    const x3 = 152 - i * 5 * position
+    const y3 = 343 - i * 6
+    const x4 = 616 - i * 5 * position
+    const y4 = 470 - i * 6
+    const x5 = 684 - i * 5 * position
+    const y5 = 875 - i * 6
 
-    return `M-${x1} ${y1}C-${x1} ${y1} -${x2} ${y2} ${x3} ${y3}C${x4} ${y4} ${x5} ${y5} ${x5} ${y5}`;
-  };
+    return `M-${x1} ${y1}C-${x1} ${y1} -${x2} ${y2} ${x3} ${y3}C${x4} ${y4} ${x5} ${y5} ${x5} ${y5}`
+  }
 
   const paths = Array.from({ length: 36 }).flatMap((_, i) => [
     { d: generatePath(i, 1), key: `path-${i}-1` },
     { d: generatePath(i, -1), key: `path-${i}-minus1` },
-  ]);
+  ])
 
-  const pathVariants = {
+  const pathVariants: Variants = {
     hidden: { pathLength: 0.3, opacity: 0.3, pathOffset: 0 },
     visible: (i: number) => ({
       pathLength: [0.3, 1, 0.3],
@@ -45,38 +45,36 @@ const HeroSection: React.FC<HeroSectionProps> = ({ navbarHeight }) => {
       pathOffset: [0, 1, 0],
       transition: {
         duration: 20 + Math.random() * 10,
-        ease: 'linear',
+        ease: "linear",
         repeat: Infinity,
-        delay: i * 0.05, // Stagger paths slightly
+        delay: i * 0.05,
       },
     }),
-  };
+  }
 
-  const wordVariants = {
+  const springTransition = {
+    type: "spring" as const,
+    stiffness: 150,
+    damping: 25,
+  }
+
+  const wordVariants: Variants = {
     hidden: { opacity: 0, y: 100 },
     visible: {
       opacity: 1,
       y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 150,
-        damping: 25,
-      },
+      transition: springTransition,
     },
-  };
+  }
 
-  const letterVariants = {
+  const letterVariants: Variants = {
     hidden: { opacity: 0, y: 100 },
     visible: {
       opacity: 1,
       y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 150,
-        damping: 25,
-      },
+      transition: springTransition,
     },
-  };
+  }
 
   return (
     <section
@@ -127,7 +125,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ navbarHeight }) => {
               animate={isInView ? "visible" : "hidden"}
               transition={{ delay: wordIndex * 0.1 }}
             >
-              {word.split('').map((char, charIndex) => (
+              {word.split("").map((char, charIndex) => (
                 <motion.span
                   key={charIndex}
                   className="inline-block"
@@ -168,12 +166,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ navbarHeight }) => {
           </span>
           <ArrowRight
             className="ml-2 w-5 h-5 transition-transform duration-300 group-hover:translate-x-1"
-            style={{ transitionDelay: '50ms' }}
+            style={{ transitionDelay: "50ms" }}
           />
         </motion.button>
       </div>
     </section>
-  );
-};
+  )
+}
 
-export default HeroSection;
+export default HeroSection
