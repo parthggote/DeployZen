@@ -3,6 +3,9 @@
 # dependencies
 /node_modules
 
+# editor
+/.vscode/
+
 # next.js
 /.next/
 /out/
@@ -15,6 +18,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+npm_output.log
+
+# generated app data
+/data/models/
+/data/apis/*.py
+/data/apis/*.js
+/data/apis/package.json
+/data/apis/jest.config.js
+/data/apis/run_tests.js
 
 # env files
 .env*

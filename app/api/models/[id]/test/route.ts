@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { getOnnxSession } from "@/app/api/activity/route"
 
 async function checkOllama(): Promise<void> {
   const res = await fetch("http://localhost:11434/api/tags")
@@ -13,10 +14,10 @@ async function checkLlamaCpp(port?: number): Promise<void> {
   if (!res.ok) throw new Error(`llama.cpp health failed: ${res.status}`)
 }
 
-async function checkOnnx(port?: number): Promise<void> {
-  if (!port) throw new Error("ONNX port missing")
-  const res = await fetch(`http://localhost:${port}/v1/metadata`)
-  if (!res.ok) throw new Error(`ONNX health failed: ${res.status}`)
+async function checkOnnx(modelId?: string): Promise<void> {
+  if (!modelId) throw new Error("ONNX model ID missing")
+  const session = getOnnxSession(modelId)
+  if (!session) throw new Error("ONNX session not loaded")
 }
 
 async function checkTorch(port?: number, modelName?: string): Promise<void> {
@@ -52,7 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         await checkLlamaCpp(model.port)
         break
       case "onnx":
-        await checkOnnx(model.port)
+        await checkOnnx(model._id.toString())
         break
       case "torch":
         await checkTorch(model.port, model.modelName)

@@ -22,9 +22,9 @@ interface KanbanCardProps {
     modelDetails?: {
       name: string
       status: string
-      latency: number
-      tokensPerSec: number
-      requestsPerSec: number
+      latency: number | null
+      tokensPerSec: number | null
+      requestsPerSec: number | null
       gpu: string
       memory: string
     }
@@ -60,8 +60,9 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
   }
 
   const generateData = () => {
-    if (modelDetails && modelDetails.status === "running") {
-      return Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + modelDetails.latency - 10)
+    const latency = modelDetails?.latency
+    if (modelDetails && modelDetails.status === "running" && latency !== null && latency !== undefined) {
+      return Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + latency - 10)
     }
     return [0, 0, 0, 0, 0, 0]
   }
@@ -104,15 +105,15 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-muted-foreground">Latency</div>
-                  <div className="font-medium">{modelDetails.latency}ms</div>
+                  <div className="font-medium">{modelDetails.latency !== null ? `${modelDetails.latency}ms` : "No telemetry yet"}</div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Tokens/sec</div>
-                  <div className="font-medium">{modelDetails.tokensPerSec}</div>
+                  <div className="font-medium">{modelDetails.tokensPerSec !== null ? modelDetails.tokensPerSec : "No telemetry yet"}</div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Requests/sec</div>
-                  <div className="font-medium">{modelDetails.requestsPerSec}</div>
+                  <div className="font-medium">{modelDetails.requestsPerSec !== null ? modelDetails.requestsPerSec : "No telemetry yet"}</div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">GPU</div>
@@ -135,7 +136,11 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
                   />
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">Memory: {modelDetails.memory}</div>
+              <div className="text-xs text-muted-foreground">
+                {modelDetails.latency === null && modelDetails.tokensPerSec === null && modelDetails.requestsPerSec === null
+                  ? "Telemetry will appear once real monitoring data is available."
+                  : `Memory: ${modelDetails.memory}`}
+              </div>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
