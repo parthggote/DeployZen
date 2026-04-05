@@ -683,7 +683,7 @@ function ScanningBanner({ progress, findingCount, newFindingCount, onCancel }: S
   const [verbIdx, setVerbIdx] = useState(0)
 
   useEffect(() => {
-    const timer = setInterval(() => setVerbIdx((v) => v + 1), 3000)
+    const timer = setInterval(() => setVerbIdx((v) => v + 1), 6000)
     return () => clearInterval(timer)
   }, [])
 
@@ -1115,8 +1115,8 @@ function ScanResultsView({
 
         {/* AI Chat Panel */}
         <ResizablePanel defaultSize={30} minSize={18} maxSize={45}>
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+          <div className="flex h-full flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5 shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="icon-xs text-primary" />
                 <p className="text-xs font-medium text-foreground">Security Assistant</p>
@@ -1125,12 +1125,14 @@ function ScanResultsView({
                 {scanning ? "Waiting..." : "Ready"}
               </Badge>
             </div>
-            <ScanChatPanel
-              scanId={scan._id}
-              chatHistory={chatHistory}
-              onNewMessage={onNewChatMessage}
-              selectedFindingIndex={selectedFindingIndex}
-            />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ScanChatPanel
+                scanId={scan._id}
+                chatHistory={chatHistory}
+                onNewMessage={onNewChatMessage}
+                selectedFindingIndex={selectedFindingIndex}
+              />
+            </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
