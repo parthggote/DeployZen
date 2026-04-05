@@ -219,7 +219,7 @@ export default function RepoScanPage() {
         /* network error — EventSource auto-reconnects */
       }
     })
-  }, [closeStream, loadScans])
+  }, [closeStream])
 
   /**
    * Checks whether GitHub OAuth has been completed
