@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 import { getLatestCommitSha } from "@/lib/github"
 import logger from "@/lib/logger"
 
 const SEMGREP_WORKER_URL = process.env.SEMGREP_WORKER_URL || "http://localhost:4000"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL
+  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
 
 interface ScanSummary {
   total: number
@@ -43,9 +47,106 @@ function computeSummary(findings: Array<{ severity: string; category: string }>,
 }
 
 /**
- * POST — Starts a new scan for a GitHub repository
+ * Updates scan progress stage in MongoDB
+ * @param {ObjectId} scanId - Scan document ID
+ * @param {string} stage - Current progress stage label
+ * @param {number} percent - Estimated progress percentage
+ */
+async function updateProgress(scanId: ObjectId, stage: string, percent: number) {
+  try {
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+    await db.collection("scans").updateOne(
+      { _id: scanId },
+      { $set: { progress: { stage, percent, updatedAt: new Date().toISOString() } } }
+    )
+  } catch {
+    /* best-effort progress update */
+  }
+}
+
+/**
+ * Runs the full scan pipeline in the background after the response is sent
+ * @param {ObjectId} scanId - Scan document ID
+ * @param {string} repoFullName - GitHub repo (owner/name)
+ * @param {string} accessToken - GitHub OAuth token
+ * @param {string} commitSha - Pinned commit SHA
+ */
+async function processScanInBackground(
+  scanId: ObjectId,
+  repoFullName: string,
+  accessToken: string,
+  commitSha: string
+) {
+  const client = await clientPromise
+  const db = client.db("DeployZen")
+
+  const callbackUrl = `${APP_URL}/api/scans/${scanId.toString()}/findings`
+
+  try {
+    await updateProgress(scanId, "Connecting to worker...", 10)
+
+    const workerRes = await fetch(`${SEMGREP_WORKER_URL}/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repoFullName,
+        accessToken,
+        commitSha,
+        callbackUrl,
+        scanId: scanId.toString(),
+      }),
+    })
+
+    if (!workerRes.ok) {
+      const errText = await workerRes.text()
+      throw new Error(`Worker returned ${workerRes.status}: ${errText}`)
+    }
+
+    const result = await workerRes.json()
+
+    const summary = computeSummary(
+      result.findings || [],
+      result.stats?.filesScanned || 0
+    )
+
+    await db.collection("scans").updateOne(
+      { _id: scanId },
+      {
+        $set: {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+          fileTree: result.fileTree || [],
+          findings: result.findings || [],
+          summary,
+          progress: { stage: "Complete", percent: 100, updatedAt: new Date().toISOString() },
+        },
+      }
+    )
+
+    logger.info("Scan completed", { scanId: scanId.toString(), findings: (result.findings || []).length })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    logger.error("Background scan failed", { scanId: scanId.toString(), error: message })
+
+    await db.collection("scans").updateOne(
+      { _id: scanId },
+      {
+        $set: {
+          status: "failed",
+          completedAt: new Date().toISOString(),
+          error: message,
+          progress: { stage: "Failed", percent: 0, updatedAt: new Date().toISOString() },
+        },
+      }
+    )
+  }
+}
+
+/**
+ * POST — Creates a scan record and kicks off background processing
  * @param {NextRequest} req - Request body: { repoFullName, branch? }
- * @returns {NextResponse} The created scan document
+ * @returns {NextResponse} The scan ID immediately (processing continues in background)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -94,6 +195,7 @@ export async function POST(req: NextRequest) {
       fileTree: [] as Array<{ path: string; type: string; size?: number; findingCount: number }>,
       findings: [] as Array<Record<string, unknown>>,
       summary: null as ScanSummary | null,
+      progress: { stage: "Initializing...", percent: 5, updatedAt: new Date().toISOString() },
       aiExplanations: {} as Record<string, string>,
       chatHistory: [] as Array<{ role: string; content: string; timestamp: string }>,
     }
@@ -101,64 +203,16 @@ export async function POST(req: NextRequest) {
     const insertResult = await db.collection("scans").insertOne(scanDoc)
     const scanId = insertResult.insertedId
 
-    try {
-      const workerRes = await fetch(`${SEMGREP_WORKER_URL}/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repoFullName,
-          accessToken: user.githubAccessToken,
-          commitSha,
-        }),
-      })
+    after(() => processScanInBackground(scanId, repoFullName, user.githubAccessToken, commitSha))
 
-      if (!workerRes.ok) {
-        const errText = await workerRes.text()
-        throw new Error(`Worker returned ${workerRes.status}: ${errText}`)
-      }
-
-      const result = await workerRes.json()
-
-      const summary = computeSummary(
-        result.findings || [],
-        result.stats?.filesScanned || 0
-      )
-
-      await db.collection("scans").updateOne(
-        { _id: scanId },
-        {
-          $set: {
-            status: "completed",
-            completedAt: new Date().toISOString(),
-            fileTree: result.fileTree || [],
-            findings: result.findings || [],
-            summary,
-          },
-        }
-      )
-
-      const updatedScan = await db.collection("scans").findOne({ _id: scanId })
-      return NextResponse.json({ success: true, scan: updatedScan }, { status: 201 })
-    } catch (workerError: unknown) {
-      const message = workerError instanceof Error ? workerError.message : "Unknown error"
-      logger.error("Semgrep worker scan failed", { scanId: scanId.toString(), error: message })
-
-      await db.collection("scans").updateOne(
-        { _id: scanId },
-        {
-          $set: {
-            status: "failed",
-            completedAt: new Date().toISOString(),
-            error: message,
-          },
-        }
-      )
-
-      return NextResponse.json(
-        { success: false, error: `Scan failed: ${message}`, scanId: scanId.toString() },
-        { status: 502 }
-      )
-    }
+    return NextResponse.json(
+      {
+        success: true,
+        scanId: scanId.toString(),
+        status: "running",
+      },
+      { status: 202 }
+    )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"
     logger.error("Scan creation failed", { error: message })
@@ -189,6 +243,7 @@ export async function GET() {
         startedAt: 1,
         completedAt: 1,
         summary: 1,
+        progress: 1,
       })
       .sort({ startedAt: -1 })
       .limit(50)

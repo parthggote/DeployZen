@@ -9,6 +9,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 4000;
 const SCAN_TIMEOUT_MS = 300_000;
+const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build", "vendor"]);
 
 /**
  * Recursively walks a directory and returns a flat list of file entries
@@ -21,7 +22,7 @@ function walkDir(dir, base) {
   const items = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const item of items) {
-    if (item.name === ".git" || item.name === "node_modules") continue;
+    if (SKIP_DIRS.has(item.name)) continue;
 
     const fullPath = path.join(dir, item.name);
     const relativePath = path.relative(base, fullPath).replace(/\\/g, "/");
@@ -85,87 +86,188 @@ function extractCategory(ruleId) {
   return "general";
 }
 
+/**
+ * Runs Semgrep on a single directory and returns parsed findings
+ * @param {string} targetPath - Absolute path to scan
+ * @param {string} basePath - Base path for relative file paths
+ * @returns {Array} Parsed findings for this directory
+ */
+function scanDirectory(targetPath, basePath) {
+  try {
+    const output = execSync(
+      `semgrep --config auto --json "${targetPath}"`,
+      { timeout: SCAN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024, stdio: "pipe" }
+    ).toString();
+    return parseSemgrepOutput(JSON.parse(output), basePath);
+  } catch (err) {
+    if (err.stdout) {
+      try {
+        return parseSemgrepOutput(JSON.parse(err.stdout.toString()), basePath);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+}
+
+/**
+ * Sends partial findings to the callback URL
+ * @param {string} callbackUrl - The Next.js API callback URL
+ * @param {object} payload - Partial findings data
+ */
+async function sendPartialResults(callbackUrl, payload) {
+  try {
+    await fetch(callbackUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error(`[callback] Failed to send partial results: ${err.message}`);
+  }
+}
+
+/**
+ * Enriches file tree entries with finding counts
+ * @param {Array} fileTree - Raw file tree entries
+ * @param {Array} findings - All findings collected so far
+ * @returns {Array} Enriched file tree
+ */
+function enrichFileTree(fileTree, findings) {
+  const findingCountByPath = {};
+  for (const f of findings) {
+    findingCountByPath[f.filePath] = (findingCountByPath[f.filePath] || 0) + 1;
+    const dir = path.dirname(f.filePath);
+    if (dir !== ".") {
+      findingCountByPath[dir] = (findingCountByPath[dir] || 0) + 1;
+    }
+  }
+  return fileTree.map((entry) => ({
+    ...entry,
+    findingCount: findingCountByPath[entry.path] || 0,
+  }));
+}
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 /**
- * POST /scan — Clones a repo, runs Semgrep, returns findings + file tree
+ * POST /scan — Clones a repo, runs Semgrep directory-by-directory,
+ * sends incremental findings via callback, returns final results
  */
 app.post("/scan", async (req, res) => {
-  const { repoFullName, accessToken, commitSha } = req.body;
+  const { repoFullName, accessToken, commitSha, callbackUrl, scanId } = req.body;
 
   if (!repoFullName || !accessToken || !commitSha) {
     return res.status(400).json({ error: "Missing required fields: repoFullName, accessToken, commitSha" });
   }
 
-  const scanId = uuidv4();
-  const tmpDir = path.join("/tmp", `scan-${scanId}`);
+  const localScanId = scanId || uuidv4();
+  const tmpDir = path.join("/tmp", `scan-${localScanId}`);
+
+  console.log(`[scan:${localScanId}] Starting scan for ${repoFullName}`);
 
   try {
     const cloneUrl = `https://x-access-token:${accessToken}@github.com/${repoFullName}.git`;
 
+    console.log(`[scan:${localScanId}] Cloning repo...`);
     execSync(
       `git clone --depth 1 "${cloneUrl}" "${tmpDir}"`,
-      { timeout: 60_000, stdio: "pipe" }
+      { timeout: 120_000, stdio: "pipe" }
     );
+    console.log(`[scan:${localScanId}] Clone complete`);
 
-    execSync(
-      `cd "${tmpDir}" && git checkout ${commitSha}`,
-      { timeout: 30_000, stdio: "pipe" }
-    ).toString();
+    const fullFileTree = walkDir(tmpDir, tmpDir);
 
-    let semgrepRaw;
-    try {
-      const output = execSync(
-        `semgrep --config auto --json "${tmpDir}"`,
-        { timeout: SCAN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024, stdio: "pipe" }
-      ).toString();
-      semgrepRaw = JSON.parse(output);
-    } catch (semgrepErr) {
-      if (semgrepErr.stdout) {
-        try {
-          semgrepRaw = JSON.parse(semgrepErr.stdout.toString());
-        } catch {
-          throw new Error("Semgrep produced invalid JSON output");
-        }
+    const topLevelItems = fs.readdirSync(tmpDir, { withFileTypes: true });
+    const scanTargets = [];
+
+    const topLevelFiles = [];
+    for (const item of topLevelItems) {
+      if (SKIP_DIRS.has(item.name)) continue;
+      if (item.isDirectory()) {
+        scanTargets.push({ name: item.name, path: path.join(tmpDir, item.name) });
       } else {
-        throw semgrepErr;
+        topLevelFiles.push(path.join(tmpDir, item.name));
       }
     }
 
-    const findings = parseSemgrepOutput(semgrepRaw, tmpDir);
-    const fileTree = walkDir(tmpDir, tmpDir);
-
-    const findingCountByDir = {};
-    for (const f of findings) {
-      const dir = path.dirname(f.filePath);
-      findingCountByDir[f.filePath] = (findingCountByDir[f.filePath] || 0) + 1;
-      if (dir !== ".") {
-        findingCountByDir[dir] = (findingCountByDir[dir] || 0) + 1;
-      }
+    if (topLevelFiles.length > 0) {
+      scanTargets.unshift({ name: "(root files)", path: tmpDir, rootOnly: true });
     }
 
-    const enrichedTree = fileTree.map((entry) => ({
-      ...entry,
-      findingCount: findingCountByDir[entry.path] || 0,
-    }));
+    const totalTargets = scanTargets.length;
+    const allFindings = [];
+    const scannedDirs = [];
 
-    res.json({
+    for (let i = 0; i < scanTargets.length; i++) {
+      const target = scanTargets[i];
+      const targetPath = target.rootOnly ? tmpDir : target.path;
+
+      console.log(`[scan:${localScanId}] Scanning ${target.name} (${i + 1}/${totalTargets})...`);
+
+      let dirFindings;
+      if (target.rootOnly) {
+        dirFindings = scanDirectory(tmpDir, tmpDir).filter(
+          (f) => !f.filePath.includes("/")
+        );
+      } else {
+        dirFindings = scanDirectory(targetPath, tmpDir);
+      }
+
+      allFindings.push(...dirFindings);
+      scannedDirs.push(target.name);
+
+      if (callbackUrl) {
+        const dirTree = target.rootOnly
+          ? fullFileTree.filter((e) => !e.path.includes("/"))
+          : fullFileTree.filter((e) => e.path === target.name || e.path.startsWith(target.name + "/"));
+
+        const enrichedDirTree = enrichFileTree(dirTree, allFindings);
+
+        await sendPartialResults(callbackUrl, {
+          directory: target.name,
+          findings: dirFindings,
+          fileTree: enrichedDirTree,
+          scannedDirs,
+          totalDirs: totalTargets,
+          currentDir: scanTargets[i + 1]?.name || null,
+          stats: {
+            total: allFindings.length,
+            critical: allFindings.filter((f) => f.severity === "ERROR").length,
+            warning: allFindings.filter((f) => f.severity === "WARNING").length,
+            info: allFindings.filter((f) => f.severity === "INFO").length,
+            filesScanned: fullFileTree.filter((e) => e.type === "file").length,
+          },
+        });
+      }
+
+      console.log(`[scan:${localScanId}] ${target.name}: ${dirFindings.length} findings`);
+    }
+
+    const enrichedFullTree = enrichFileTree(fullFileTree, allFindings);
+
+    const result = {
       success: true,
       commitSha,
-      findings,
-      fileTree: enrichedTree,
+      findings: allFindings,
+      fileTree: enrichedFullTree,
       stats: {
-        total: findings.length,
-        critical: findings.filter((f) => f.severity === "ERROR").length,
-        warning: findings.filter((f) => f.severity === "WARNING").length,
-        info: findings.filter((f) => f.severity === "INFO").length,
-        filesScanned: fileTree.filter((e) => e.type === "file").length,
+        total: allFindings.length,
+        critical: allFindings.filter((f) => f.severity === "ERROR").length,
+        warning: allFindings.filter((f) => f.severity === "WARNING").length,
+        info: allFindings.filter((f) => f.severity === "INFO").length,
+        filesScanned: fullFileTree.filter((e) => e.type === "file").length,
       },
-    });
+    };
+
+    res.json(result);
+    console.log(`[scan:${localScanId}] Done — ${allFindings.length} findings, ${enrichedFullTree.length} tree entries`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error(`[scan:${localScanId}] Failed: ${message}`);
     res.status(500).json({ error: `Scan failed: ${message}` });
   } finally {
     try {
@@ -177,6 +279,5 @@ app.post("/scan", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
   console.log(`Semgrep worker listening on port ${PORT}`);
 });

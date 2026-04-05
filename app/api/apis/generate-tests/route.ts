@@ -30,7 +30,7 @@ async function generateAITestCases(apiContent: string, apiName: string, descript
     return generateDeterministicTestCases(apiContent, apiName, description)
   }
 
-  const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+  const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
   const prompt = `Analyze the uploaded API and generate a JSON array of structured API contract tests.
 
 API name: ${apiName}

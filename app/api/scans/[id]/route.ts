@@ -45,3 +45,47 @@ export async function GET(
     )
   }
 }
+
+/**
+ * DELETE — Removes a scan record from the database
+ * @param {NextRequest} _req - Incoming request
+ * @param {object} context - Route params containing scan ID
+ * @returns {NextResponse} Success or error
+ */
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    if (!id || !ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid scan ID" },
+        { status: 400 }
+      )
+    }
+
+    const client = await clientPromise
+    const db = client.db("DeployZen")
+
+    const result = await db.collection("scans").deleteOne({ _id: new ObjectId(id) })
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json(
+        { success: false, error: "Scan not found" },
+        { status: 404 }
+      )
+    }
+
+    logger.info("Scan deleted", { scanId: id })
+    return NextResponse.json({ success: true })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    logger.error("Failed to delete scan", { error: message })
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
