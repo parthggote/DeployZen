@@ -37,6 +37,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const hfStatus = await checkHuggingFaceModelStatus(model.huggingFaceModelId, user.hfAccessToken)
 
+    if (hfStatus.unsupported) {
+      await db.collection("models").updateOne(
+        { _id: model._id },
+        { $set: { status: "Failed", statusError: hfStatus.reason, lastActivity: new Date().toISOString() } }
+      )
+      return NextResponse.json({
+        status: "failed",
+        error: hfStatus.reason || "No inference provider available for this model",
+      })
+    }
+
     const newStatus = hfStatus.loaded ? "Running" : "Loading"
     if (newStatus !== model.status) {
       await db.collection("models").updateOne(
@@ -46,12 +57,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (hfStatus.loaded) {
-      return NextResponse.json({ status: "running" })
+      return NextResponse.json({ status: "running", provider: hfStatus.provider })
     }
 
     return NextResponse.json({
       status: "loading",
       estimatedTime: hfStatus.estimatedTime || 30,
+      provider: hfStatus.provider,
     })
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Health check failed"

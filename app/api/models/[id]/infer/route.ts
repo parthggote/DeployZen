@@ -58,7 +58,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       model.huggingFaceModelId,
       inputs,
       mergedParams,
-      user.hfAccessToken
+      user.hfAccessToken,
+      model.inferenceProvider || undefined,
+      model.inferenceProviderId || undefined,
+      model.task || "text-generation"
     )
 
     await db.collection("inference_metrics").insertOne({
