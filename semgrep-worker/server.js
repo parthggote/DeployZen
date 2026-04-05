@@ -221,7 +221,8 @@ async function runSemgrep(targets, basePath) {
     const result = await runProcess(
       "semgrep",
       [
-        "--config", "auto",
+        "--config", "p/default",
+        "--config", "p/security-audit",
         "--json",
         "--jobs", "1",
         "--timeout", String(SEMGREP_TIMEOUT_SECONDS),
