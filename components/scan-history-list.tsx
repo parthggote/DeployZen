@@ -39,7 +39,7 @@ interface ScanHistoryListProps {
   loading: boolean
   selectedId: string | null
   onSelect: (scanId: string) => void
-  onDelete: (scanId: string) => void
+  onDelete: (scanId: string) => void | Promise<void>
 }
 
 /**
@@ -79,8 +79,11 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
 
     setDeleting(scanId)
     setConfirmingDelete(null)
-    onDelete(scanId)
-    setDeleting(null)
+    try {
+      await Promise.resolve(onDelete(scanId))
+    } finally {
+      setDeleting(null)
+    }
   }
 
   if (loading) {

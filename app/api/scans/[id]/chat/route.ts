@@ -133,8 +133,8 @@ export async function POST(
       {
         $push: {
           chatHistory: { $each: [userEntry, assistantEntry] },
-        } as Record<string, unknown>,
-      }
+        },
+      } as Record<string, unknown>
     )
 
     return NextResponse.json({

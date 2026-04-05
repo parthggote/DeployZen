@@ -1,5 +1,5 @@
 const express = require("express");
-const { execSync } = require("child_process");
+const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
@@ -9,6 +9,8 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 4000;
 const SCAN_TIMEOUT_MS = 300_000;
+const MAX_FILE_BYTES = Number(process.env.SEMGREP_MAX_FILE_BYTES || 1024 * 1024);
+const MAX_BATCH_FILES = Number(process.env.SEMGREP_MAX_BATCH_FILES || 100);
 const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build", "vendor"]);
 
 /**
@@ -37,6 +39,46 @@ function walkDir(dir, base) {
   }
 
   return entries;
+}
+
+/**
+ * Recursively collects scannable files below a directory while skipping oversized files
+ * @param {string} dir - Directory to walk
+ * @returns {string[]} Absolute file paths
+ */
+function collectScannableFiles(dir) {
+  const files = [];
+  const items = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const item of items) {
+    if (SKIP_DIRS.has(item.name)) continue;
+
+    const fullPath = path.join(dir, item.name);
+    if (item.isDirectory()) {
+      files.push(...collectScannableFiles(fullPath));
+      continue;
+    }
+
+    const stats = fs.statSync(fullPath);
+    if (stats.size > MAX_FILE_BYTES) continue;
+    files.push(fullPath);
+  }
+
+  return files;
+}
+
+/**
+ * Splits a list of targets into fixed-size batches
+ * @param {string[]} items - Paths to split
+ * @param {number} batchSize - Max items per batch
+ * @returns {string[][]} Batches of file paths
+ */
+function chunkItems(items, batchSize) {
+  const batches = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    batches.push(items.slice(i, i + batchSize));
+  }
+  return batches;
 }
 
 /**
@@ -87,17 +129,28 @@ function extractCategory(ruleId) {
 }
 
 /**
- * Runs Semgrep on a single directory and returns parsed findings
- * @param {string} targetPath - Absolute path to scan
+ * Runs Semgrep on a set of files and returns parsed findings
+ * @param {string[]} targets - Absolute paths to scan
  * @param {string} basePath - Base path for relative file paths
  * @returns {Array} Parsed findings for this directory
  */
-function scanDirectory(targetPath, basePath) {
+function runSemgrep(targets, basePath) {
+  if (!targets.length) return [];
+
   try {
-    const output = execSync(
-      `semgrep --config auto --json "${targetPath}"`,
-      { timeout: SCAN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024, stdio: "pipe" }
-    ).toString();
+    const result = spawnSync(
+      "semgrep",
+      ["--config", "auto", "--json", ...targets],
+      { timeout: SCAN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024, stdio: "pipe", encoding: "utf8" }
+    );
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    const output = result.stdout || result.stderr || "";
+    if (!output) return [];
+
     return parseSemgrepOutput(JSON.parse(output), basePath);
   } catch (err) {
     if (err.stdout) {
@@ -109,6 +162,23 @@ function scanDirectory(targetPath, basePath) {
     }
     return [];
   }
+}
+
+/**
+ * Runs Semgrep across a directory in batches to avoid large target timeouts
+ * @param {string[]} targets - Absolute file paths to scan
+ * @param {string} basePath - Base path for relative file paths
+ * @returns {Array} Combined findings
+ */
+function scanFileBatches(targets, basePath) {
+  const findings = [];
+  const batches = chunkItems(targets, MAX_BATCH_FILES);
+
+  for (const batch of batches) {
+    findings.push(...runSemgrep(batch, basePath));
+  }
+
+  return findings;
 }
 
 /**
@@ -125,6 +195,23 @@ async function sendPartialResults(callbackUrl, payload) {
     });
   } catch (err) {
     console.error(`[callback] Failed to send partial results: ${err.message}`);
+  }
+}
+
+/**
+ * Sends the final scan status to the callback URL
+ * @param {string} callbackUrl - The Next.js API callback URL
+ * @param {object} payload - Final status payload
+ */
+async function finalizeScan(callbackUrl, payload) {
+  try {
+    await fetch(callbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error(`[callback] Failed to send final scan state: ${err.message}`);
   }
 }
 
@@ -154,16 +241,10 @@ app.get("/health", (_req, res) => {
 });
 
 /**
- * POST /scan — Clones a repo, runs Semgrep directory-by-directory,
- * sends incremental findings via callback, returns final results
+ * Runs the scan pipeline and streams results back via callbacks
+ * @param {object} job - Scan job definition
  */
-app.post("/scan", async (req, res) => {
-  const { repoFullName, accessToken, commitSha, callbackUrl, scanId } = req.body;
-
-  if (!repoFullName || !accessToken || !commitSha) {
-    return res.status(400).json({ error: "Missing required fields: repoFullName, accessToken, commitSha" });
-  }
-
+async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, scanId }) {
   const localScanId = scanId || uuidv4();
   const tmpDir = path.join("/tmp", `scan-${localScanId}`);
 
@@ -177,6 +258,7 @@ app.post("/scan", async (req, res) => {
       `git clone --depth 1 "${cloneUrl}" "${tmpDir}"`,
       { timeout: 120_000, stdio: "pipe" }
     );
+    execSync(`git -C "${tmpDir}" checkout --force "${commitSha}"`, { timeout: 60_000, stdio: "pipe" });
     console.log(`[scan:${localScanId}] Clone complete`);
 
     const fullFileTree = walkDir(tmpDir, tmpDir);
@@ -201,21 +283,19 @@ app.post("/scan", async (req, res) => {
     const totalTargets = scanTargets.length;
     const allFindings = [];
     const scannedDirs = [];
+    let scannedFileCount = 0;
 
     for (let i = 0; i < scanTargets.length; i++) {
       const target = scanTargets[i];
-      const targetPath = target.rootOnly ? tmpDir : target.path;
+      const targetFiles = target.rootOnly
+        ? topLevelFiles
+            .filter((filePath) => fs.statSync(filePath).size <= MAX_FILE_BYTES)
+        : collectScannableFiles(target.path);
 
       console.log(`[scan:${localScanId}] Scanning ${target.name} (${i + 1}/${totalTargets})...`);
 
-      let dirFindings;
-      if (target.rootOnly) {
-        dirFindings = scanDirectory(tmpDir, tmpDir).filter(
-          (f) => !f.filePath.includes("/")
-        );
-      } else {
-        dirFindings = scanDirectory(targetPath, tmpDir);
-      }
+      const dirFindings = scanFileBatches(targetFiles, tmpDir);
+      scannedFileCount += targetFiles.length;
 
       allFindings.push(...dirFindings);
       scannedDirs.push(target.name);
@@ -239,7 +319,7 @@ app.post("/scan", async (req, res) => {
             critical: allFindings.filter((f) => f.severity === "ERROR").length,
             warning: allFindings.filter((f) => f.severity === "WARNING").length,
             info: allFindings.filter((f) => f.severity === "INFO").length,
-            filesScanned: fullFileTree.filter((e) => e.type === "file").length,
+            filesScanned: scannedFileCount,
           },
         });
       }
@@ -248,27 +328,34 @@ app.post("/scan", async (req, res) => {
     }
 
     const enrichedFullTree = enrichFileTree(fullFileTree, allFindings);
-
-    const result = {
-      success: true,
-      commitSha,
-      findings: allFindings,
-      fileTree: enrichedFullTree,
-      stats: {
-        total: allFindings.length,
-        critical: allFindings.filter((f) => f.severity === "ERROR").length,
-        warning: allFindings.filter((f) => f.severity === "WARNING").length,
-        info: allFindings.filter((f) => f.severity === "INFO").length,
-        filesScanned: fullFileTree.filter((e) => e.type === "file").length,
-      },
+    const stats = {
+      total: allFindings.length,
+      critical: allFindings.filter((f) => f.severity === "ERROR").length,
+      warning: allFindings.filter((f) => f.severity === "WARNING").length,
+      info: allFindings.filter((f) => f.severity === "INFO").length,
+      filesScanned: scannedFileCount,
     };
 
-    res.json(result);
+    if (callbackUrl) {
+      await finalizeScan(callbackUrl, {
+        status: "completed",
+        findings: allFindings,
+        fileTree: enrichedFullTree,
+        stats,
+      });
+    }
+
     console.log(`[scan:${localScanId}] Done — ${allFindings.length} findings, ${enrichedFullTree.length} tree entries`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[scan:${localScanId}] Failed: ${message}`);
-    res.status(500).json({ error: `Scan failed: ${message}` });
+
+    if (callbackUrl) {
+      await finalizeScan(callbackUrl, {
+        status: "failed",
+        error: `Scan failed: ${message}`,
+      });
+    }
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -276,6 +363,32 @@ app.post("/scan", async (req, res) => {
       /* cleanup best-effort */
     }
   }
+}
+
+/**
+ * POST /scan — Accepts a scan job and processes it asynchronously
+ */
+app.post("/scan", async (req, res) => {
+  const { repoFullName, accessToken, commitSha } = req.body;
+
+  if (!repoFullName || !accessToken || !commitSha) {
+    return res.status(400).json({ error: "Missing required fields: repoFullName, accessToken, commitSha" });
+  }
+
+  const scanId = req.body.scanId || uuidv4();
+
+  runScanJob({
+    ...req.body,
+    scanId,
+  }).catch((error) => {
+    console.error(`[scan:${scanId}] Background job crashed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+
+  return res.status(202).json({
+    success: true,
+    accepted: true,
+    scanId,
+  });
 });
 
 app.listen(PORT, () => {

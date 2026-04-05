@@ -19,34 +19,6 @@ interface ScanSummary {
 }
 
 /**
- * Computes a summary from raw findings
- * @param {Array} findings - Semgrep findings array
- * @param {number} filesScanned - Total file count
- * @returns {ScanSummary} Aggregated summary
- */
-function computeSummary(findings: Array<{ severity: string; category: string }>, filesScanned: number): ScanSummary {
-  const categoryMap: Record<string, number> = {}
-
-  for (const f of findings) {
-    categoryMap[f.category] = (categoryMap[f.category] || 0) + 1
-  }
-
-  const topCategories = Object.entries(categoryMap)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-
-  return {
-    total: findings.length,
-    critical: findings.filter((f) => f.severity === "ERROR").length,
-    warning: findings.filter((f) => f.severity === "WARNING").length,
-    info: findings.filter((f) => f.severity === "INFO").length,
-    filesScanned,
-    topCategories,
-  }
-}
-
-/**
  * Updates scan progress stage in MongoDB
  * @param {ObjectId} scanId - Scan document ID
  * @param {string} stage - Current progress stage label
@@ -78,9 +50,6 @@ async function processScanInBackground(
   accessToken: string,
   commitSha: string
 ) {
-  const client = await clientPromise
-  const db = client.db("DeployZen")
-
   const callbackUrl = `${APP_URL}/api/scans/${scanId.toString()}/findings`
 
   try {
@@ -103,31 +72,31 @@ async function processScanInBackground(
       throw new Error(`Worker returned ${workerRes.status}: ${errText}`)
     }
 
-    const result = await workerRes.json()
+    await workerRes.json()
 
-    const summary = computeSummary(
-      result.findings || [],
-      result.stats?.filesScanned || 0
-    )
+    const client = await clientPromise
+    const db = client.db("DeployZen")
 
     await db.collection("scans").updateOne(
       { _id: scanId },
       {
         $set: {
-          status: "completed",
-          completedAt: new Date().toISOString(),
-          fileTree: result.fileTree || [],
-          findings: result.findings || [],
-          summary,
-          progress: { stage: "Complete", percent: 100, updatedAt: new Date().toISOString() },
+          progress: {
+            stage: "Queued on worker...",
+            percent: 15,
+            updatedAt: new Date().toISOString(),
+          },
         },
       }
     )
 
-    logger.info("Scan completed", { scanId: scanId.toString(), findings: (result.findings || []).length })
+    logger.info("Scan accepted by worker", { scanId: scanId.toString() })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"
     logger.error("Background scan failed", { scanId: scanId.toString(), error: message })
+
+    const client = await clientPromise
+    const db = client.db("DeployZen")
 
     await db.collection("scans").updateOne(
       { _id: scanId },
