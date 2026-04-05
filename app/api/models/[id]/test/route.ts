@@ -1,69 +1,61 @@
 import { NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getOnnxSession } from "@/app/api/activity/route"
+import { checkHuggingFaceModelStatus } from "@/lib/huggingface"
+import logger from "@/lib/logger"
 
-async function checkOllama(): Promise<void> {
-  const res = await fetch("http://localhost:11434/api/tags")
-  if (!res.ok) throw new Error(`Ollama health failed: ${res.status}`)
-}
-
-async function checkLlamaCpp(port?: number): Promise<void> {
-  if (!port) throw new Error("llama.cpp port missing")
-  const res = await fetch(`http://localhost:${port}/health`)
-  if (!res.ok) throw new Error(`llama.cpp health failed: ${res.status}`)
-}
-
-async function checkOnnx(modelId?: string): Promise<void> {
-  if (!modelId) throw new Error("ONNX model ID missing")
-  const session = getOnnxSession(modelId)
-  if (!session) throw new Error("ONNX session not loaded")
-}
-
-async function checkTorch(port?: number, modelName?: string): Promise<void> {
-  if (!port) throw new Error("TorchServe port missing")
-  if (!modelName) throw new Error("TorchServe model name missing")
-  const res = await fetch(`http://localhost:${port}/models/${encodeURIComponent(modelName)}`)
-  if (!res.ok) throw new Error(`TorchServe health failed: ${res.status}`)
-}
-
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * Performs a health check on a registered HF model by testing if it's
+ * loaded on the Serverless Inference API
+ * @param {NextRequest} _req - Incoming request (unused)
+ * @param {object} context - Route params with model ID
+ * @returns {NextResponse} JSON with status, estimatedTime, or error
+ */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
-    if (!params.id || !ObjectId.isValid(params.id)) {
-        return NextResponse.json({ status: "failed", error: "Invalid model ID" }, { status: 400 })
+    if (!id || !ObjectId.isValid(id)) {
+      return NextResponse.json({ status: "failed", error: "Invalid model ID" }, { status: 400 })
     }
 
     const client = await clientPromise
     const db = client.db("DeployZen")
-    const model = await db.collection("models").findOne({ _id: new ObjectId(params.id) })
 
+    const model = await db.collection("models").findOne({ _id: new ObjectId(id) })
     if (!model) {
       return NextResponse.json({ status: "failed", error: "Model not found" }, { status: 404 })
     }
 
-    if (model.status !== "Running") {
-      return NextResponse.json({ status: "failed", error: `Model status is ${model.status}` }, { status: 400 })
+    if (!model.huggingFaceModelId) {
+      return NextResponse.json({ status: "failed", error: "No HF model ID associated" }, { status: 400 })
     }
 
-    switch (model.mode) {
-      case "ollama":
-        await checkOllama()
-        break
-      case "llama.cpp":
-        await checkLlamaCpp(model.port)
-        break
-      case "onnx":
-        await checkOnnx(model._id.toString())
-        break
-      case "torch":
-        await checkTorch(model.port, model.modelName)
-        break
-      default:
-        return NextResponse.json({ status: "failed", error: `Unsupported mode ${model.mode}` }, { status: 400 })
+    const user = await db.collection("users").findOne({ hfAccessToken: { $exists: true } })
+    if (!user?.hfAccessToken) {
+      return NextResponse.json({ status: "failed", error: "Hugging Face not connected" }, { status: 401 })
     }
 
-    return NextResponse.json({ status: "running" })
-  } catch (e: any) {
-    return NextResponse.json({ status: "failed", error: e?.message || "Health check failed" }, { status: 500 })
+    const hfStatus = await checkHuggingFaceModelStatus(model.huggingFaceModelId, user.hfAccessToken)
+
+    const newStatus = hfStatus.loaded ? "Running" : "Loading"
+    if (newStatus !== model.status) {
+      await db.collection("models").updateOne(
+        { _id: model._id },
+        { $set: { status: newStatus, lastActivity: new Date().toISOString() } }
+      )
+    }
+
+    if (hfStatus.loaded) {
+      return NextResponse.json({ status: "running" })
+    }
+
+    return NextResponse.json({
+      status: "loading",
+      estimatedTime: hfStatus.estimatedTime || 30,
+    })
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Health check failed"
+    logger.error("Model health check failed", { id, error: message })
+    return NextResponse.json({ status: "failed", error: message }, { status: 500 })
   }
 }
