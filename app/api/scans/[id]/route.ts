@@ -3,6 +3,8 @@ import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import logger from "@/lib/logger"
 
+const STALE_SCAN_MS = 10 * 60 * 1000
+
 /**
  * GET — Retrieves full scan results by ID
  * @param {NextRequest} _req - Incoming request
@@ -33,6 +35,45 @@ export async function GET(
         { success: false, error: "Scan not found" },
         { status: 404 }
       )
+    }
+
+    const progressUpdatedAt = scan.progress?.updatedAt
+      ? new Date(scan.progress.updatedAt).getTime()
+      : NaN
+
+    if (
+      scan.status === "running"
+      && Number.isFinite(progressUpdatedAt)
+      && Date.now() - progressUpdatedAt > STALE_SCAN_MS
+    ) {
+      const staleError = "Scan stalled before completion. The worker may have restarted or timed out."
+
+      await db.collection("scans").updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            status: "failed",
+            completedAt: new Date().toISOString(),
+            error: staleError,
+            progress: {
+              ...(scan.progress || {}),
+              stage: "Failed",
+              percent: 0,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        }
+      )
+
+      scan.status = "failed"
+      scan.completedAt = new Date().toISOString()
+      scan.error = staleError
+      scan.progress = {
+        ...(scan.progress || {}),
+        stage: "Failed",
+        percent: 0,
+        updatedAt: new Date().toISOString(),
+      }
     }
 
     return NextResponse.json({ success: true, scan })
