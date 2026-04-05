@@ -7,6 +7,7 @@ import {
   Activity,
   ChevronLeft,
   Cpu,
+  GitBranch,
   Kanban,
   LayoutDashboard,
   Menu,
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Model Deployments", href: "/dashboard/upload-model", icon: Cpu, hint: "Deploy runtimes and manage model artifacts" },
   { name: "Runtime Monitor", href: "/dashboard/monitoring", icon: Activity, hint: "Check runtime health and available telemetry" },
   { name: "Release Board", href: "/dashboard/kanban", icon: Kanban, hint: "Move API and model work across workflow stages" },
+  { name: "Repo Scanner", href: "/dashboard/repo-scan", icon: GitBranch, hint: "Scan GitHub repos for security vulnerabilities" },
 ]
 
 interface SystemHealth {

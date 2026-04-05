@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: deployzen-semgrep-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 4000
+    healthCheckPath: /health

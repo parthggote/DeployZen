@@ -1,0 +1,12 @@
+{
+  "name": "deployzen-semgrep-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "uuid": "^11.1.0"
+  }
+}
