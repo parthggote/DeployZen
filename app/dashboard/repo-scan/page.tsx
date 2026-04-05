@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   AlertTriangle,
   ArrowLeft,
-  CheckCircle,
   FileCode,
   Folder,
-  FolderSearch,
   GitBranch,
   Github,
   Loader2,
@@ -17,19 +15,18 @@ import {
   Shield,
   Sparkles,
   X,
-  XCircle,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
 import { RepoSelector } from "@/components/repo-selector"
@@ -135,9 +132,6 @@ export default function RepoScanPage() {
 
   const [newFindingCount, setNewFindingCount] = useState(0)
   const prevFindingCountRef = useRef(0)
-  const viewRef = useRef<View>(view)
-  viewRef.current = view
-
   /**
    * Closes the active SSE connection
    */
@@ -172,7 +166,7 @@ export default function RepoScanPage() {
 
         const hasData = (scan.findings?.length || 0) > 0 || (scan.fileTree?.length || 0) > 0
 
-        if (!isTerminal && hasData) {
+        if (!isTerminal) {
           const incoming = scan.findings?.length || 0
           if (incoming > prevFindingCountRef.current) {
             setNewFindingCount(incoming - prevFindingCountRef.current)
@@ -183,10 +177,6 @@ export default function RepoScanPage() {
           setFullScan(scan)
           setExplanations(scan.aiExplanations || {})
           setChatHistory(scan.chatHistory || [])
-
-          if (viewRef.current === "progress") {
-            setView("results")
-          }
         }
 
         if (isTerminal) {
@@ -285,9 +275,7 @@ export default function RepoScanPage() {
     setScanning(true)
     setScanError(null)
     setScanProgress({ stage: "Queued", percent: 2, updatedAt: new Date().toISOString() })
-    setFullScan(null)
     prevFindingCountRef.current = 0
-    setView("progress")
 
     try {
       const res = await fetch("/api/scans", {
@@ -304,6 +292,22 @@ export default function RepoScanPage() {
       if (data.success && data.scanId) {
         setRunningScanId(data.scanId)
         setSelectedScanId(data.scanId)
+        setFullScan({
+          _id: data.scanId,
+          repoFullName: selectedRepo.fullName,
+          branch: selectedRepo.defaultBranch,
+          commitSha: data.commitSha || "-------",
+          status: "running",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          fileTree: [],
+          findings: [],
+          summary: null,
+          progress: { stage: "Queued", percent: 2, updatedAt: new Date().toISOString() },
+          aiExplanations: {},
+          chatHistory: [],
+        })
+        setView("results")
         openScanStream(data.scanId)
       } else {
         setScanError(data.error || "Scan failed")
@@ -343,14 +347,10 @@ export default function RepoScanPage() {
           setScanning(true)
           prevFindingCountRef.current = scan.findings?.length || 0
 
-          if (scan.findings?.length > 0 || scan.fileTree?.length > 0) {
-            setFullScan(scan)
-            setExplanations(scan.aiExplanations || {})
-            setChatHistory(scan.chatHistory || [])
-            setView("results")
-          } else {
-            setView("progress")
-          }
+          setFullScan(scan)
+          setExplanations(scan.aiExplanations || {})
+          setChatHistory(scan.chatHistory || [])
+          setView("results")
 
           openScanStream(scanId)
         } else {
@@ -481,24 +481,7 @@ export default function RepoScanPage() {
     )
   }
 
-  if (view === "progress") {
-    return (
-      <ScanProgressView
-        repoName={selectedRepo?.fullName || ""}
-        progress={scanProgress}
-        error={scanError}
-        onCancel={() => {
-          closeStream()
-          setScanning(false)
-          setScanProgress(null)
-          setRunningScanId(null)
-          setView("home")
-        }}
-      />
-    )
-  }
-
-  if (view === "results" && fullScan) {
+  if ((view === "results" || view === "progress") && fullScan) {
     return <ScanResultsView
       scan={fullScan}
       scanLoading={scanLoading}
@@ -513,6 +496,14 @@ export default function RepoScanPage() {
       chatHistory={chatHistory}
       selectedFindingIndex={selectedFindingIndex}
       onBack={() => {
+        closeStream()
+        setScanning(false)
+        setScanProgress(null)
+        setRunningScanId(null)
+        setView("home")
+        setFullScan(null)
+      }}
+      onCancel={() => {
         closeStream()
         setScanning(false)
         setScanProgress(null)
@@ -659,7 +650,7 @@ export default function RepoScanPage() {
   )
 }
 
-/* ── Spinner verbs (inspired by Claude Code) ── */
+/* ── Scanning verbs (inspired by Claude Code) ── */
 
 const SCAN_VERBS = [
   "Analyzing", "Auditing", "Inspecting", "Probing", "Scrutinizing",
@@ -667,295 +658,86 @@ const SCAN_VERBS = [
   "Parsing", "Traversing", "Deciphering", "Processing", "Orchestrating",
   "Synthesizing", "Correlating", "Validating", "Enumerating", "Cataloging",
   "Percolating", "Cogitating", "Calibrating", "Computing", "Crystallizing",
+  "Ruminating", "Contemplating", "Untangling", "Decoding", "Rummaging",
 ]
-
-/**
- * Returns a random verb from the scan verbs list
- * @param {number} seed - Numeric seed for deterministic selection
- * @returns {string} A random verb
- */
-function getVerb(seed: number): string {
-  return SCAN_VERBS[seed % SCAN_VERBS.length]
-}
-
-/* ── Progress View (initial stages before findings arrive) ── */
-
-interface ScanProgressViewProps {
-  repoName: string
-  progress: ScanProgress | null
-  error: string | null
-  onCancel: () => void
-}
-
-interface LogEntry {
-  id: string
-  text: string
-  status: "done" | "active" | "error"
-  timestamp: number
-}
-
-/**
- * Full-page progress view with Claude-style shimmer verbs and accumulating log
- * @param {ScanProgressViewProps} props - Component props
- */
-function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressViewProps) {
-  const stage = progress?.stage || "Queued"
-  const percent = progress?.percent || 2
-  const isFailed = stage === "Failed" || !!error
-
-  const [verbIdx, setVerbIdx] = useState(0)
-  const [elapsed, setElapsed] = useState(0)
-  const startRef = useRef(Date.now())
-  const logRef = useRef<LogEntry[]>([])
-  const lastStageRef = useRef("")
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
-    }, 1000)
-    return () => clearInterval(tick)
-  }, [])
-
-  useEffect(() => {
-    const verbTimer = setInterval(() => setVerbIdx((v) => v + 1), 3000)
-    return () => clearInterval(verbTimer)
-  }, [])
-
-  if (stage !== lastStageRef.current) {
-    if (lastStageRef.current && logRef.current.length > 0) {
-      const last = logRef.current[logRef.current.length - 1]
-      if (last.status === "active") last.status = "done"
-    }
-
-    if (stage && stage !== "Failed") {
-      logRef.current.push({
-        id: `${stage}-${Date.now()}`,
-        text: stage,
-        status: isFailed ? "error" : "active",
-        timestamp: Date.now() - startRef.current,
-      })
-    }
-    lastStageRef.current = stage
-  }
-
-  if (isFailed && logRef.current.length > 0) {
-    const last = logRef.current[logRef.current.length - 1]
-    if (last.status === "active") last.status = "error"
-  }
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [stage])
-
-  /**
-   * Formats seconds into a compact duration string
-   * @param {number} s - Seconds elapsed
-   * @returns {string} Formatted duration
-   */
-  const fmtTime = (ms: number) => {
-    const s = Math.floor(ms / 1000)
-    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
-  }
-
-  const verb = getVerb(verbIdx)
-
-  return (
-    <div className="mx-auto w-full max-w-2xl py-8">
-      <div className="overflow-hidden rounded-2xl border border-border/50 bg-surface-secondary/30">
-        {/* Top progress strip */}
-        {!isFailed && (
-          <div className="relative h-1 w-full bg-border/20 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 bg-primary transition-all duration-700 ease-out"
-              style={{ width: `${percent}%` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/30 to-transparent animate-[shimmer_2s_infinite]" />
-          </div>
-        )}
-        {isFailed && <div className="h-1 w-full bg-error" />}
-
-        {/* Header row */}
-        <div className="flex items-center justify-between border-b border-border/30 px-5 py-3">
-          <div className="flex items-center gap-3">
-            {isFailed ? (
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-error/10">
-                <XCircle className="h-4 w-4 text-error" />
-              </div>
-            ) : (
-              <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
-                <Shield className="h-4 w-4 text-primary" />
-                <div className="absolute inset-0 rounded-xl border border-primary/20 animate-ping opacity-20" />
-              </div>
-            )}
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                {isFailed ? "Scan Failed" : repoName}
-              </p>
-              {!isFailed && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Security scan · {elapsed}s elapsed
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {!isFailed && (
-              <span className="text-xs tabular-nums font-medium text-foreground/50">
-                {percent}%
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 rounded-lg text-xs text-muted-foreground hover:text-foreground"
-              onClick={onCancel}
-            >
-              {isFailed ? "Back" : "Cancel"}
-            </Button>
-          </div>
-        </div>
-
-        {/* Verb shimmer row */}
-        {!isFailed && (
-          <div className="flex items-center gap-3 border-b border-border/20 px-5 py-3">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-            <span
-              key={verb}
-              className="text-sm font-medium text-primary animate-in fade-in slide-in-from-bottom-1 duration-500 scan-shimmer-text"
-            >
-              {verb}...
-            </span>
-          </div>
-        )}
-
-        {/* Log area */}
-        <div ref={scrollRef} className="max-h-[280px] overflow-y-auto">
-          <div className="px-5 py-3 space-y-0.5 font-mono text-xs">
-            {logRef.current.map((entry) => (
-              <div
-                key={entry.id}
-                className={cn(
-                  "flex items-start gap-2.5 py-1 animate-in fade-in slide-in-from-bottom-1 duration-300",
-                  entry.status === "error" && "text-error"
-                )}
-              >
-                {entry.status === "done" ? (
-                  <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-px text-success" />
-                ) : entry.status === "error" ? (
-                  <XCircle className="h-3.5 w-3.5 shrink-0 mt-px text-error" />
-                ) : (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 mt-px animate-spin text-primary" />
-                )}
-                <span className={cn(
-                  "flex-1",
-                  entry.status === "done" && "text-muted-foreground",
-                  entry.status === "active" && "text-foreground",
-                  entry.status === "error" && "text-error"
-                )}>
-                  {entry.text}
-                </span>
-                <span className="shrink-0 tabular-nums text-muted-foreground/40">
-                  {fmtTime(entry.timestamp)}
-                </span>
-              </div>
-            ))}
-
-            {/* Blinking cursor at end */}
-            {!isFailed && (
-              <div className="flex items-center gap-2.5 py-1">
-                <span className="h-3.5 w-3.5 shrink-0" />
-                <span className="inline-block h-4 w-[2px] bg-primary animate-pulse" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Error detail */}
-        {isFailed && error && (
-          <div className="border-t border-error/20 bg-error/5 px-5 py-3">
-            <p className="text-xs text-error">{error}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /* ── Live Scanning Banner ── */
 
 interface ScanningBannerProps {
-  repoName: string
   progress: ScanProgress | null
   findingCount: number
   newFindingCount: number
+  onCancel: () => void
 }
 
 /**
- * Compact banner showing live scan progress at the top of the results view
+ * Compact banner showing live scan progress with a rotating verb
  * @param {ScanningBannerProps} props - Component props
  */
-function ScanningBanner({ repoName, progress, findingCount, newFindingCount }: ScanningBannerProps) {
+function ScanningBanner({ progress, findingCount, newFindingCount, onCancel }: ScanningBannerProps) {
   const percent = progress?.percent || 0
+  const currentDir = progress?.currentDir
   const scannedDirs = progress?.scannedDirs || []
   const totalDirs = progress?.totalDirs || 0
-  const currentDir = progress?.currentDir
 
-  const dirProgress = totalDirs > 0
-    ? `${scannedDirs.length}/${totalDirs} directories`
-    : progress?.stage || "Scanning..."
+  const [verbIdx, setVerbIdx] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => setVerbIdx((v) => v + 1), 3000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const verb = SCAN_VERBS[verbIdx % SCAN_VERBS.length]
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5">
-      <div className="absolute inset-0 opacity-[0.03]">
+    <div className="relative overflow-hidden rounded-xl border border-primary/20">
+      {/* Shimmer progress bar */}
+      <div className="relative h-1 w-full bg-border/20 overflow-hidden">
         <div
-          className="h-full bg-primary animate-pulse"
+          className="absolute inset-y-0 left-0 bg-primary transition-all duration-700 ease-out"
           style={{ width: `${percent}%` }}
         />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/30 to-transparent animate-[shimmer_2s_infinite]" />
       </div>
 
-      <div className="relative px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-foreground">
-                  Scanning: {repoName}
-                </p>
-                {currentDir && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
-                    <FolderSearch className="h-2.5 w-2.5" />
-                    {currentDir}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {dirProgress}
-              </p>
-            </div>
-          </div>
+      <div className="flex items-center justify-between px-4 py-2 bg-primary/[0.03]">
+        <div className="flex items-center gap-3 min-w-0">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+          <span
+            key={verb}
+            className="text-xs font-medium text-primary animate-in fade-in slide-in-from-bottom-1 duration-500 scan-shimmer-text"
+          >
+            {verb}...
+          </span>
+          {currentDir && (
+            <span className="text-[11px] text-muted-foreground truncate">
+              {currentDir}{totalDirs > 0 ? ` (${scannedDirs.length}/${totalDirs})` : ""}
+            </span>
+          )}
+        </div>
 
-          <div className="flex items-center gap-4">
-            {newFindingCount > 0 && (
-              <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs animate-in fade-in slide-in-from-right-2 duration-300">
-                +{newFindingCount} new
-              </Badge>
-            )}
-            <div className="text-right">
-              <p className="text-sm font-semibold text-foreground">{findingCount}</p>
-              <p className="text-[10px] text-muted-foreground">findings</p>
-            </div>
-            <div className="w-24">
-              <Progress value={percent} className="h-1.5" />
-              <p className="text-[10px] text-muted-foreground text-right mt-0.5">{percent}%</p>
-            </div>
-          </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {newFindingCount > 0 && (
+            <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-[10px] px-1.5 py-0 animate-in fade-in slide-in-from-right-2 duration-300">
+              +{newFindingCount}
+            </Badge>
+          )}
+          {findingCount > 0 && (
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {findingCount} found
+            </span>
+          )}
+          <span className="text-[11px] tabular-nums font-medium text-foreground/50">
+            {percent}%
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 rounded-md text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
@@ -978,6 +760,7 @@ interface ScanResultsViewProps {
   chatHistory: ChatMessage[]
   selectedFindingIndex: number | null
   onBack: () => void
+  onCancel: () => void
   onFileSelect: (path: string) => void
   onExplain: (index: number) => void
   onNewChatMessage: (userMsg: ChatMessage, assistantMsg: ChatMessage) => void
@@ -1003,6 +786,7 @@ function ScanResultsView({
   chatHistory,
   selectedFindingIndex,
   onBack,
+  onCancel,
   onFileSelect,
   onExplain,
   onNewChatMessage,
@@ -1017,16 +801,18 @@ function ScanResultsView({
   }
 
   const scannedDirSet = new Set(scanProgress?.scannedDirs || [])
+  const hasFiles = scan.fileTree.length > 0
+  const hasFindings = scan.findings.length > 0
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-hidden">
       {/* Live scanning banner */}
       {scanning && (
         <ScanningBanner
-          repoName={scan.repoFullName}
           progress={scanProgress}
           findingCount={scan.findings.length}
           newFindingCount={newFindingCount}
+          onCancel={onCancel}
         />
       )}
 
@@ -1041,19 +827,19 @@ function ScanResultsView({
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
+        <div className="flex items-start gap-3 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-xl mt-0.5"
+            className="h-8 w-8 rounded-xl mt-0.5 shrink-0"
             onClick={onBack}
           >
             <ArrowLeft className="icon-sm" />
           </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground truncate">
                 {scan.repoFullName}
               </h1>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -1078,8 +864,8 @@ function ScanResultsView({
           </div>
         </div>
 
-        {scan.summary && (
-          <div className="flex items-center gap-px rounded-xl border border-border/50 bg-surface-secondary/50 overflow-hidden">
+        {scan.summary ? (
+          <div className="flex items-center gap-px rounded-xl border border-border/50 bg-surface-secondary/50 overflow-hidden shrink-0">
             {scan.summary.critical > 0 && (
               <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
                 <span className="h-2 w-2 rounded-full bg-error shadow-[0_0_6px] shadow-error/40" />
@@ -1104,12 +890,22 @@ function ScanResultsView({
               <span className="text-[10px] text-muted-foreground">files</span>
             </div>
           </div>
-        )}
+        ) : scanning ? (
+          <div className="flex items-center gap-px rounded-xl border border-border/50 bg-surface-secondary/50 overflow-hidden shrink-0">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30 last:border-r-0">
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <Skeleton className="h-4 w-5" />
+                <Skeleton className="h-3 w-10" />
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* File content viewer */}
       {selectedFile && fileContent !== null && (
-        <Card className="rounded-2xl border-border/60 overflow-hidden">
+        <Card className="rounded-2xl border-border/60 overflow-hidden max-w-full">
           <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/50 px-4 py-2">
             <div className="flex items-center gap-2 min-w-0">
               <FileCode className="icon-sm text-primary shrink-0" />
@@ -1207,12 +1003,36 @@ function ScanResultsView({
               </div>
             </div>
             <div className="flex-1 overflow-auto px-1 py-1">
-              <RepoFileExplorer
-                fileTree={scan.fileTree}
-                selectedFile={selectedFile}
-                loadingFile={loadingFile}
-                onFileSelect={onFileSelect}
-              />
+              {hasFiles ? (
+                <RepoFileExplorer
+                  fileTree={scan.fileTree}
+                  selectedFile={selectedFile}
+                  loadingFile={loadingFile}
+                  onFileSelect={onFileSelect}
+                />
+              ) : scanning ? (
+                <div className="space-y-1.5 px-2 py-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1">
+                      <Skeleton className="h-3.5 w-3.5 rounded" />
+                      <Skeleton className="h-3" style={{ width: `${45 + (i * 17) % 40}%` }} />
+                    </div>
+                  ))}
+                  <div className="pl-4 space-y-1.5 mt-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-2 py-1">
+                        <Skeleton className="h-3 w-3 rounded" />
+                        <Skeleton className="h-3" style={{ width: `${35 + (i * 23) % 50}%` }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50">
+                  <Folder className="h-6 w-6" />
+                  <p className="mt-1.5 text-[11px]">No files</p>
+                </div>
+              )}
             </div>
           </div>
         </ResizablePanel>
@@ -1255,14 +1075,38 @@ function ScanResultsView({
               )}
             </div>
             <div className="flex-1 overflow-auto px-2 py-1">
-              <ScanFindingsPanel
-                findings={scan.findings}
-                explanations={explanations}
-                loadingExplanation={loadingExplanation}
-                selectedFile={selectedFile}
-                onExplain={onExplain}
-                onFileClick={onFileSelect}
-              />
+              {hasFindings ? (
+                <ScanFindingsPanel
+                  findings={scan.findings}
+                  explanations={explanations}
+                  loadingExplanation={loadingExplanation}
+                  selectedFile={selectedFile}
+                  onExplain={onExplain}
+                  onFileClick={onFileSelect}
+                />
+              ) : scanning ? (
+                <div className="space-y-3 py-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="rounded-xl border border-border/40 p-3 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-14 rounded-full" />
+                        <Skeleton className="h-3.5 w-24" />
+                      </div>
+                      <Skeleton className="h-3 w-[80%]" />
+                      <Skeleton className="h-3 w-[55%]" />
+                      <div className="flex items-center gap-2 pt-1">
+                        <Skeleton className="h-3 w-3 rounded" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50">
+                  <Shield className="h-6 w-6" />
+                  <p className="mt-1.5 text-[11px]">No findings</p>
+                </div>
+              )}
             </div>
           </div>
         </ResizablePanel>

@@ -3,13 +3,24 @@
 import { useState } from "react"
 import {
   AlertTriangle,
-  CheckCircle,
+  CircleCheck,
+  CircleDot,
+  CircleX,
   Clock,
-  GitBranch,
   Loader2,
+  ShieldAlert,
   Trash2,
-  XCircle,
 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -61,28 +72,45 @@ function timeAgo(dateStr: string): string {
 }
 
 /**
+ * Returns the status icon and color for a scan record
+ * @param {string} status - Scan status
+ * @returns {{ Icon: React.ComponentType, color: string }}
+ */
+function statusMeta(status: string) {
+  switch (status) {
+    case "completed":
+      return { Icon: CircleCheck, color: "text-success" }
+    case "completed_with_errors":
+      return { Icon: ShieldAlert, color: "text-warning" }
+    case "failed":
+      return { Icon: CircleX, color: "text-error" }
+    case "running":
+      return { Icon: Loader2, color: "text-primary", spin: true }
+    case "queued":
+    case "pending":
+      return { Icon: Clock, color: "text-muted-foreground" }
+    default:
+      return { Icon: CircleDot, color: "text-muted-foreground" }
+  }
+}
+
+/**
  * Displays a scrollable list of past scans with status indicators and delete action
  * @param {ScanHistoryListProps} props - Component props
  */
 export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete }: ScanHistoryListProps) {
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   /**
-   * Handles the delete action with confirmation
-   * @param {string} scanId - Scan ID to delete
+   * Handles the confirmed delete action
    */
-  async function handleDelete(scanId: string) {
-    if (confirmingDelete !== scanId) {
-      setConfirmingDelete(scanId)
-      setTimeout(() => setConfirmingDelete(null), 3000)
-      return
-    }
-
-    setDeleting(scanId)
-    setConfirmingDelete(null)
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(deleteTarget)
+    setDeleteTarget(null)
     try {
-      await Promise.resolve(onDelete(scanId))
+      await Promise.resolve(onDelete(deleteTarget))
     } finally {
       setDeleting(null)
     }
@@ -99,129 +127,122 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
   if (scans.length === 0) {
     return (
       <div className="py-8 text-center">
-        <GitBranch className="mx-auto icon-lg text-muted-foreground/50" />
+        <ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground/30" />
         <p className="mt-2 text-sm text-muted-foreground">No scans yet</p>
         <p className="text-xs text-muted-foreground/70">Select a repo and start scanning</p>
       </div>
     )
   }
 
+  const deleteTargetScan = scans.find((s) => s._id === deleteTarget)
+
   return (
-    <ScrollArea className="h-[20rem]">
-      <div className="space-y-1.5 pr-3">
-        {scans.map((scan) => {
-          const StatusIcon =
-            scan.status === "completed"
-              ? CheckCircle
-              : scan.status === "completed_with_errors"
-                ? AlertTriangle
-                : scan.status === "failed"
-                  ? XCircle
-                  : scan.status === "running"
-                    ? Loader2
-                    : Clock
+    <>
+      <ScrollArea className="h-[20rem]">
+        <div className="space-y-1 pr-3">
+          {scans.map((scan) => {
+            const { Icon, color, spin } = statusMeta(scan.status) as { Icon: React.ComponentType<{ className?: string }>; color: string; spin?: boolean }
+            const isDeleting = deleting === scan._id
 
-          const statusColor =
-            scan.status === "completed"
-              ? "text-success"
-              : scan.status === "completed_with_errors"
-                ? "text-warning"
-                : scan.status === "failed"
-                  ? "text-error"
-                  : "text-warning"
-
-          const isConfirming = confirmingDelete === scan._id
-          const isDeleting = deleting === scan._id
-
-          return (
-            <div
-              key={scan._id}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all",
-                selectedId === scan._id
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-transparent hover:border-border/60 hover:bg-background/80"
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => onSelect(scan._id)}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-              >
-                <StatusIcon
-                  className={cn(
-                    "icon-sm shrink-0",
-                    statusColor,
-                    scan.status === "running" && "animate-spin"
-                  )}
-                />
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {scan.repoFullName}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>{scan.branch}</span>
-                    <span>·</span>
-                    <span>{timeAgo(scan.startedAt)}</span>
-                  </div>
-                </div>
-
-                {scan.summary && (scan.status === "completed" || scan.status === "completed_with_errors") && (
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {scan.status === "completed_with_errors" && (
-                      <Badge className="bg-warning/10 text-warning hover:bg-warning/10 text-[10px] px-1.5 py-0">
-                        partial
-                      </Badge>
-                    )}
-                    {scan.summary.critical > 0 && (
-                      <Badge className="bg-error/10 text-error hover:bg-error/10 text-[10px] px-1.5 py-0">
-                        {scan.summary.critical}
-                      </Badge>
-                    )}
-                    {scan.summary.warning > 0 && (
-                      <Badge className="bg-warning/10 text-warning hover:bg-warning/10 text-[10px] px-1.5 py-0">
-                        {scan.summary.warning}
-                      </Badge>
-                    )}
-                    {scan.summary.info > 0 && (
-                      <Badge className="bg-info/10 text-info hover:bg-info/10 text-[10px] px-1.5 py-0">
-                        {scan.summary.info}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                {scan.status === "failed" && (
-                  <AlertTriangle className="icon-xs shrink-0 text-error" />
-                )}
-              </button>
-
-              <Button
-                variant="ghost"
-                size="icon"
+            return (
+              <div
+                key={scan._id}
                 className={cn(
-                  "h-7 w-7 shrink-0 rounded-lg transition-all",
-                  isConfirming
-                    ? "bg-error/10 text-error opacity-100"
-                    : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-error hover:bg-error/10"
+                  "group flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-all",
+                  selectedId === scan._id
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-transparent hover:border-border/60 hover:bg-background/80",
+                  isDeleting && "opacity-50 pointer-events-none"
                 )}
-                disabled={isDeleting}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDelete(scan._id)
-                }}
               >
-                {isDeleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </div>
-          )
-        })}
-      </div>
-    </ScrollArea>
+                <button
+                  type="button"
+                  onClick={() => onSelect(scan._id)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      color,
+                      spin && "animate-spin"
+                    )}
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {scan.repoFullName}
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span className="truncate">{scan.branch}</span>
+                      <span>·</span>
+                      <span className="shrink-0">{timeAgo(scan.startedAt)}</span>
+                    </div>
+                  </div>
+
+                  {scan.summary && (scan.status === "completed" || scan.status === "completed_with_errors") && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {scan.status === "completed_with_errors" && (
+                        <Badge className="bg-warning/10 text-warning hover:bg-warning/10 text-[9px] px-1 py-0">
+                          partial
+                        </Badge>
+                      )}
+                      {scan.summary.critical > 0 && (
+                        <Badge className="bg-error/10 text-error hover:bg-error/10 text-[9px] px-1 py-0">
+                          {scan.summary.critical}
+                        </Badge>
+                      )}
+                      {scan.summary.warning > 0 && (
+                        <Badge className="bg-warning/10 text-warning hover:bg-warning/10 text-[9px] px-1 py-0">
+                          {scan.summary.warning}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 rounded-lg text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-error hover:bg-error/10 transition-all"
+                  disabled={isDeleting}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDeleteTarget(scan._id)
+                  }}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      </ScrollArea>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="rounded-2xl max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">Delete scan?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              This will permanently delete the scan for{" "}
+              <span className="font-medium text-foreground">{deleteTargetScan?.repoFullName}</span>.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-8 text-xs rounded-lg">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="h-8 text-xs rounded-lg bg-error text-error-foreground hover:bg-error/90"
+              onClick={confirmDelete}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
