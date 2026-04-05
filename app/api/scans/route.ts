@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { after } from "next/server"
 import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
 import { getLatestCommitSha } from "@/lib/github"
 import logger from "@/lib/logger"
-
-const SEMGREP_WORKER_URL = process.env.SEMGREP_WORKER_URL || "http://localhost:4000"
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL
-  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-const WORKER_RETRY_ATTEMPTS = 5
-const WORKER_RETRY_BASE_MS = 15_000
 
 interface ScanSummary {
   total: number
@@ -21,112 +13,10 @@ interface ScanSummary {
 }
 
 /**
- * Updates scan progress stage in MongoDB
- * @param {ObjectId} scanId - Scan document ID
- * @param {string} stage - Current progress stage label
- * @param {number} percent - Estimated progress percentage
- */
-async function updateProgress(scanId: ObjectId, stage: string, percent: number) {
-  try {
-    const client = await clientPromise
-    const db = client.db("DeployZen")
-    await db.collection("scans").updateOne(
-      { _id: scanId },
-      { $set: { progress: { stage, percent, updatedAt: new Date().toISOString() } } }
-    )
-  } catch {
-    /* best-effort progress update */
-  }
-}
-
-/**
- * Runs the full scan pipeline in the background after the response is sent
- * @param {ObjectId} scanId - Scan document ID
- * @param {string} repoFullName - GitHub repo (owner/name)
- * @param {string} accessToken - GitHub OAuth token
- * @param {string} commitSha - Pinned commit SHA
- */
-async function processScanInBackground(
-  scanId: ObjectId,
-  repoFullName: string,
-  accessToken: string,
-  commitSha: string,
-  branch: string
-) {
-  const callbackUrl = `${APP_URL}/api/scans/${scanId.toString()}/findings`
-  const payload = JSON.stringify({
-    repoFullName,
-    accessToken,
-    commitSha,
-    branch,
-    callbackUrl,
-    scanId: scanId.toString(),
-  })
-
-  try {
-    await updateProgress(scanId, "Connecting to worker...", 10)
-
-    let accepted = false
-
-    for (let attempt = 0; attempt < WORKER_RETRY_ATTEMPTS; attempt++) {
-      const workerRes = await fetch(`${SEMGREP_WORKER_URL}/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      })
-
-      if (workerRes.ok) {
-        await workerRes.json()
-        accepted = true
-        break
-      }
-
-      if (workerRes.status === 429 && attempt < WORKER_RETRY_ATTEMPTS - 1) {
-        const waitMs = WORKER_RETRY_BASE_MS * (attempt + 1)
-        logger.info("Worker busy, retrying", {
-          scanId: scanId.toString(),
-          attempt: attempt + 1,
-          waitMs,
-        })
-        await updateProgress(scanId, `Worker busy, retrying in ${Math.round(waitMs / 1000)}s...`, 8)
-        await new Promise((r) => setTimeout(r, waitMs))
-        continue
-      }
-
-      const errText = await workerRes.text()
-      throw new Error(`Worker returned ${workerRes.status}: ${errText}`)
-    }
-
-    if (!accepted) {
-      throw new Error("Worker did not accept scan after retries")
-    }
-
-    logger.info("Scan accepted by worker", { scanId: scanId.toString() })
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    logger.error("Background scan failed", { scanId: scanId.toString(), error: message })
-
-    const client = await clientPromise
-    const db = client.db("DeployZen")
-
-    await db.collection("scans").updateOne(
-      { _id: scanId },
-      {
-        $set: {
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          error: message,
-          progress: { stage: "Failed", percent: 0, updatedAt: new Date().toISOString() },
-        },
-      }
-    )
-  }
-}
-
-/**
- * POST — Creates a scan record and kicks off background processing
+ * POST — Creates a scan record in "queued" status.
+ * Workers pick up queued scans via /api/queue/next.
  * @param {NextRequest} req - Request body: { repoFullName, branch? }
- * @returns {NextResponse} The scan ID immediately (processing continues in background)
+ * @returns {NextResponse} The scan ID
  */
 export async function POST(req: NextRequest) {
   try {
@@ -169,13 +59,13 @@ export async function POST(req: NextRequest) {
       repoFullName,
       branch: targetBranch,
       commitSha,
-      status: "running" as const,
+      status: "queued" as const,
       startedAt: new Date().toISOString(),
       completedAt: null as string | null,
       fileTree: [] as Array<{ path: string; type: string; size?: number; findingCount: number }>,
       findings: [] as Array<Record<string, unknown>>,
       summary: null as ScanSummary | null,
-      progress: { stage: "Initializing...", percent: 5, updatedAt: new Date().toISOString() },
+      progress: { stage: "Queued", percent: 2, updatedAt: new Date().toISOString() },
       aiExplanations: {} as Record<string, string>,
       chatHistory: [] as Array<{ role: string; content: string; timestamp: string }>,
     }
@@ -183,13 +73,13 @@ export async function POST(req: NextRequest) {
     const insertResult = await db.collection("scans").insertOne(scanDoc)
     const scanId = insertResult.insertedId
 
-    after(() => processScanInBackground(scanId, repoFullName, user.githubAccessToken, commitSha, targetBranch))
+    logger.info("Scan queued", { scanId: scanId.toString(), repo: repoFullName })
 
     return NextResponse.json(
       {
         success: true,
         scanId: scanId.toString(),
-        status: "running",
+        status: "queued",
       },
       { status: 202 }
     )

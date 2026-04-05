@@ -115,7 +115,7 @@ export default function RepoScanPage() {
 
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null)
   const [runningScanId, setRunningScanId] = useState<string | null>(null)
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const evtSourceRef = useRef<EventSource | null>(null)
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<string | null>(null)
@@ -132,79 +132,94 @@ export default function RepoScanPage() {
   viewRef.current = view
 
   /**
-   * Stops the polling interval for scan progress
+   * Closes the active SSE connection
    */
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
+  const closeStream = useCallback(() => {
+    if (evtSourceRef.current) {
+      evtSourceRef.current.close()
+      evtSourceRef.current = null
     }
   }, [])
 
   /**
-   * Polls the scan status and updates progress/findings incrementally
-   * Transitions from progress view to live results as soon as findings arrive
-   * @param {string} scanId - The scan ID to poll
+   * Opens an SSE stream for a scan and processes live updates.
+   * Replaces polling — the server pushes changes as they happen.
+   * @param {string} scanId - Scan ID to stream
    */
-  const pollScanStatus = useCallback(async (scanId: string) => {
-    try {
-      const res = await fetch(`/api/scans/${scanId}`)
-      const data = await res.json()
+  const openScanStream = useCallback((scanId: string) => {
+    closeStream()
 
-      if (!data.success || !data.scan) return
+    const evtSource = new EventSource(`/api/scans/${scanId}/stream`)
+    evtSourceRef.current = evtSource
 
-      const scan = data.scan as FullScan
-
-      if (scan.progress) {
-        setScanProgress(scan.progress)
-      }
-
-      const hasLiveFindings = scan.findings && scan.findings.length > 0
-      const hasFileTree = scan.fileTree && scan.fileTree.length > 0
-
-      if (scan.status === "running" && (hasLiveFindings || hasFileTree)) {
-        const incoming = scan.findings?.length || 0
-        if (incoming > prevFindingCountRef.current) {
-          setNewFindingCount(incoming - prevFindingCountRef.current)
-          prevFindingCountRef.current = incoming
-
-          setTimeout(() => setNewFindingCount(0), 2000)
+    evtSource.addEventListener("scan_update", (e: MessageEvent) => {
+      try {
+        const { scan, isTerminal } = JSON.parse(e.data) as {
+          scan: FullScan
+          isTerminal: boolean
         }
 
-        setFullScan(scan)
-        setExplanations(scan.aiExplanations || {})
-        setChatHistory(scan.chatHistory || [])
-
-        if (viewRef.current === "progress") {
-          setView("results")
+        if (scan.progress) {
+          setScanProgress(scan.progress)
         }
-      }
 
-      if (scan.status === "completed" || scan.status === "completed_with_errors") {
-        stopPolling()
-        setFullScan(scan)
-        setExplanations(scan.aiExplanations || {})
-        setChatHistory(scan.chatHistory || [])
-        setRunningScanId(null)
+        const hasData = (scan.findings?.length || 0) > 0 || (scan.fileTree?.length || 0) > 0
+
+        if (!isTerminal && hasData) {
+          const incoming = scan.findings?.length || 0
+          if (incoming > prevFindingCountRef.current) {
+            setNewFindingCount(incoming - prevFindingCountRef.current)
+            prevFindingCountRef.current = incoming
+            setTimeout(() => setNewFindingCount(0), 2000)
+          }
+
+          setFullScan(scan)
+          setExplanations(scan.aiExplanations || {})
+          setChatHistory(scan.chatHistory || [])
+
+          if (viewRef.current === "progress") {
+            setView("results")
+          }
+        }
+
+        if (isTerminal) {
+          setFullScan(scan)
+          setExplanations(scan.aiExplanations || {})
+          setChatHistory(scan.chatHistory || [])
+          setRunningScanId(null)
+          setScanning(false)
+          setScanProgress(null)
+          prevFindingCountRef.current = 0
+
+          if (scan.status === "failed") {
+            setScanError(scan.error || "Scan failed")
+            setView("home")
+          } else {
+            setView("results")
+          }
+
+          loadScans()
+          evtSource.close()
+          evtSourceRef.current = null
+        }
+      } catch {
+        /* malformed event, skip */
+      }
+    })
+
+    evtSource.addEventListener("error", (e: MessageEvent) => {
+      try {
+        const { error } = JSON.parse(e.data) as { error: string }
+        setScanError(error)
         setScanning(false)
-        setScanProgress(null)
-        prevFindingCountRef.current = 0
-        setView("results")
-        loadScans()
-      } else if (scan.status === "failed") {
-        stopPolling()
-        setRunningScanId(null)
-        setScanning(false)
-        setScanProgress(null)
-        prevFindingCountRef.current = 0
-        setScanError(scan.error || "Scan failed")
         setView("home")
-        loadScans()
+        evtSource.close()
+        evtSourceRef.current = null
+      } catch {
+        /* network error — EventSource auto-reconnects */
       }
-    } catch {
-      /* polling failure is non-critical, next poll will retry */
-    }
-  }, [stopPolling])
+    })
+  }, [closeStream, loadScans])
 
   /**
    * Checks whether GitHub OAuth has been completed
@@ -251,8 +266,8 @@ export default function RepoScanPage() {
   }, [])
 
   useEffect(() => {
-    return () => stopPolling()
-  }, [stopPolling])
+    return () => closeStream()
+  }, [closeStream])
 
   /**
    * Starts a scan for the selected repository
@@ -262,7 +277,7 @@ export default function RepoScanPage() {
 
     setScanning(true)
     setScanError(null)
-    setScanProgress({ stage: "Initializing...", percent: 5, updatedAt: new Date().toISOString() })
+    setScanProgress({ stage: "Queued", percent: 2, updatedAt: new Date().toISOString() })
     setFullScan(null)
     prevFindingCountRef.current = 0
     setView("progress")
@@ -282,12 +297,7 @@ export default function RepoScanPage() {
       if (data.success && data.scanId) {
         setRunningScanId(data.scanId)
         setSelectedScanId(data.scanId)
-
-        pollingRef.current = setInterval(() => {
-          pollScanStatus(data.scanId)
-        }, 2000)
-
-        pollScanStatus(data.scanId)
+        openScanStream(data.scanId)
       } else {
         setScanError(data.error || "Scan failed")
         setScanning(false)
@@ -320,8 +330,8 @@ export default function RepoScanPage() {
       if (data.success && data.scan) {
         const scan = data.scan as FullScan
 
-        if (scan.status === "running") {
-          setScanProgress(scan.progress || { stage: "Running...", percent: 30, updatedAt: new Date().toISOString() })
+        if (scan.status === "running" || scan.status === "queued") {
+          setScanProgress(scan.progress || { stage: "Running...", percent: 10, updatedAt: new Date().toISOString() })
           setRunningScanId(scanId)
           setScanning(true)
           prevFindingCountRef.current = scan.findings?.length || 0
@@ -335,9 +345,7 @@ export default function RepoScanPage() {
             setView("progress")
           }
 
-          pollingRef.current = setInterval(() => {
-            pollScanStatus(scanId)
-          }, 2000)
+          openScanStream(scanId)
         } else {
           setFullScan(scan)
           setExplanations(scan.aiExplanations || {})
@@ -473,7 +481,7 @@ export default function RepoScanPage() {
         progress={scanProgress}
         error={scanError}
         onCancel={() => {
-          stopPolling()
+          closeStream()
           setScanning(false)
           setScanProgress(null)
           setRunningScanId(null)
@@ -498,7 +506,7 @@ export default function RepoScanPage() {
       chatHistory={chatHistory}
       selectedFindingIndex={selectedFindingIndex}
       onBack={() => {
-        stopPolling()
+        closeStream()
         setScanning(false)
         setScanProgress(null)
         setRunningScanId(null)
@@ -658,19 +666,26 @@ interface ScanProgressViewProps {
  * @param {ScanProgressViewProps} props - Component props
  */
 function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressViewProps) {
-  const stage = progress?.stage || "Initializing..."
-  const percent = progress?.percent || 5
+  const stage = progress?.stage || "Queued"
+  const percent = progress?.percent || 2
   const isFailed = stage === "Failed" || !!error
 
   const stages = [
-    "Initializing...",
-    "Connecting to worker...",
-    "Cloning repository...",
-    "Running security scan...",
+    { key: "queued", label: "Queued — waiting for worker" },
+    { key: "connecting", label: "Connecting to worker" },
+    { key: "cloning", label: "Cloning repository" },
+    { key: "scanning", label: "Running security scan" },
   ]
 
-  const currentStageIndex = stages.findIndex((s) => stage.startsWith(s.replace("...", "")))
-  const isScanning = stage.startsWith("Scanning:") || stage.startsWith("Running")
+  const stageMap: Record<string, number> = {}
+  if (stage === "Queued") stageMap.idx = 0
+  else if (stage.startsWith("Connecting")) stageMap.idx = 1
+  else if (stage.startsWith("Cloning") || stage.startsWith("Analyzing")) stageMap.idx = 2
+  else if (stage.startsWith("Scanning:") || stage.startsWith("Scanned")) stageMap.idx = 3
+  else stageMap.idx = -1
+
+  const currentIdx = stageMap.idx
+  const isScanning = currentIdx === 3
 
   return (
     <div className="flex items-center justify-center py-16">
@@ -711,17 +726,13 @@ function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressV
               ) : (
                 <div className="space-y-1.5">
                   {stages.map((s, i) => {
-                    const isActive = isScanning
-                      ? s === "Running security scan..."
-                      : s === stage || (currentStageIndex === -1 && i === stages.length - 1)
-                    const isDone = isScanning
-                      ? i < stages.length - 1
-                      : i < currentStageIndex
+                    const isActive = i === currentIdx
+                    const isDone = currentIdx >= 0 && i < currentIdx
                     const isPending = !isDone && !isActive
 
                     return (
                       <div
-                        key={s}
+                        key={s.key}
                         className={cn(
                           "flex items-center gap-2.5 rounded-lg px-3 py-1.5 transition-all",
                           isActive && "bg-primary/5"
@@ -742,7 +753,7 @@ function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressV
                             isPending && "text-muted-foreground/50"
                           )}
                         >
-                          {s.replace("...", "")}
+                          {s.label}
                         </span>
                       </div>
                     )

@@ -28,7 +28,7 @@ export interface ScanRecord {
   repoFullName: string
   branch: string
   commitSha: string
-  status: "pending" | "running" | "completed" | "completed_with_errors" | "failed"
+  status: "queued" | "pending" | "running" | "completed" | "completed_with_errors" | "failed"
   startedAt: string
   completedAt: string | null
   summary: ScanSummary | null
