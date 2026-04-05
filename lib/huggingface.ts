@@ -1,7 +1,7 @@
 import logger from "@/lib/logger"
 
 const HF_API_BASE = "https://huggingface.co/api"
-const HF_INFERENCE_BASE = "https://api-inference.huggingface.co/models"
+const HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models"
 
 export interface HFModelCard {
   id: string
