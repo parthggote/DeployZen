@@ -4,7 +4,7 @@
  * across dashboard, monitoring, upload-model, and upload-api pages.
  */
 
-export type ModelStatus = "Running" | "Pending" | "Initializing" | "Failed" | "Stopped"
+export type ModelStatus = "Running" | "Pending" | "Initializing" | "Loading" | "Failed" | "Stopped"
 export type TestStatus = "pending" | "passed" | "failed" | "running"
 export type TestPriority = "high" | "medium" | "low"
 
@@ -19,6 +19,7 @@ export function getModelStatusStyle(status: ModelStatus | string): string {
       return "bg-success/10 text-success hover:bg-success/10"
     case "Pending":
     case "Initializing":
+    case "Loading":
       return "bg-warning/10 text-warning hover:bg-warning/10"
     case "Failed":
       return "bg-error/10 text-error hover:bg-error/10"
