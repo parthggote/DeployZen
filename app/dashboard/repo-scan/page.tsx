@@ -805,20 +805,22 @@ function ScanResultsView({
   const hasFindings = scan.findings.length > 0
 
   return (
-    <div className="space-y-4 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-4rem)] gap-4 overflow-hidden">
       {/* Live scanning banner */}
       {scanning && (
-        <ScanningBanner
-          progress={scanProgress}
-          findingCount={scan.findings.length}
-          newFindingCount={newFindingCount}
-          onCancel={onCancel}
-        />
+        <div className="shrink-0">
+          <ScanningBanner
+            progress={scanProgress}
+            findingCount={scan.findings.length}
+            newFindingCount={newFindingCount}
+            onCancel={onCancel}
+          />
+        </div>
       )}
 
       {/* Partial-failure warning */}
       {!scanning && scan.status === "completed_with_errors" && (
-        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
+        <div className="shrink-0 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
           <AlertTriangle className="icon-xs text-warning shrink-0" />
           <p className="text-xs text-warning">
             {scan.error || "Some directories failed to scan. Results may be incomplete."}
@@ -827,7 +829,7 @@ function ScanResultsView({
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
+      <div className="shrink-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
         <div className="flex items-start gap-3 min-w-0">
           <Button
             variant="ghost"
@@ -905,7 +907,7 @@ function ScanResultsView({
 
       {/* File content viewer */}
       {selectedFile && fileContent !== null && (
-        <Card className="rounded-2xl border-border/60 overflow-hidden max-w-full">
+        <Card className="shrink-0 rounded-2xl border-border/60 overflow-hidden max-w-full">
           <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/50 px-4 py-2">
             <div className="flex items-center gap-2 min-w-0">
               <FileCode className="icon-sm text-primary shrink-0" />
@@ -980,7 +982,7 @@ function ScanResultsView({
       {/* Three-column resizable layout */}
       <ResizablePanelGroup
         direction="horizontal"
-        className="h-[calc(100vh-14rem)] rounded-2xl border border-border/50 overflow-hidden"
+        className="flex-1 min-h-0 rounded-2xl border border-border/50 overflow-hidden"
       >
         {/* File Explorer */}
         <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>

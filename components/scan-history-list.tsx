@@ -203,9 +203,10 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 shrink-0 rounded-lg text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-error hover:bg-error/10 transition-all"
+                  className="h-6 w-6 shrink-0 rounded-lg text-muted-foreground/40 hover:text-error hover:bg-error/10 transition-all"
                   disabled={isDeleting}
                   onClick={(e) => {
+                    e.preventDefault()
                     e.stopPropagation()
                     setDeleteTarget(scan._id)
                   }}
@@ -236,7 +237,10 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
             <AlertDialogCancel className="h-8 text-xs rounded-lg">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="h-8 text-xs rounded-lg bg-error text-error-foreground hover:bg-error/90"
-              onClick={confirmDelete}
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDelete()
+              }}
             >
               Delete
             </AlertDialogAction>
