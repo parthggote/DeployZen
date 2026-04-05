@@ -72,10 +72,8 @@ export async function DELETE(
     const result = await db.collection("scans").deleteOne({ _id: new ObjectId(id) })
 
     if (result.deletedCount === 0) {
-      return NextResponse.json(
-        { success: false, error: "Scan not found" },
-        { status: 404 }
-      )
+      logger.info("Scan delete requested for missing document", { scanId: id })
+      return NextResponse.json({ success: true, alreadyDeleted: true })
     }
 
     logger.info("Scan deleted", { scanId: id })
