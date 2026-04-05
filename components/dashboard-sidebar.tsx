@@ -116,18 +116,18 @@ export function DashboardSidebar() {
 
   const sidebarContent = (
     <>
-      <div className="relative border-b border-border/70 px-4 py-5">
-        <div className={cn("flex min-h-12 items-center", collapsed ? "justify-center" : "pr-8")}>
-          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className="relative shrink-0 rounded-[1.35rem] border border-border/70 bg-background p-1.5 shadow-sm">
+      <div className="relative border-b border-border/50 px-4 py-4">
+        <div className={cn("flex items-center", collapsed ? "justify-center" : "pr-8")}>
+          <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
+            <div className="relative shrink-0 rounded-xl border border-border/50 bg-background p-1 shadow-sm">
               <img
                 src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png"
                 alt="DeployZen"
-                className="h-9 w-9 rounded-2xl"
+                className="h-7 w-7 rounded-lg"
               />
-              <span className={cn("absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background", healthBg)} />
+              <span className={cn("absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background", healthBg)} />
             </div>
-            {!collapsed ? <span className="text-base font-medium tracking-tight text-foreground">DeployZen</span> : null}
+            {!collapsed ? <span className="text-sm font-medium tracking-tight text-foreground/80">DeployZen</span> : null}
           </div>
         </div>
 
@@ -136,15 +136,15 @@ export function DashboardSidebar() {
             variant="ghost"
             size="icon"
             onClick={() => setMobileOpen(false)}
-            className="absolute right-3 top-1/2 z-10 h-8 w-8 -translate-y-1/2 rounded-full lg:hidden"
+            className="absolute right-3 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full lg:hidden"
           >
-            <X className="icon-sm" />
+            <X className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>
 
-      <div className={cn("flex-1 py-5", collapsed ? "px-2" : "px-4")}>
-        <nav className="space-y-1.5">
+      <div className={cn("flex-1 py-3", collapsed ? "px-2" : "px-3")}>
+        <nav className="space-y-0.5">
           {navigation.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -153,61 +153,54 @@ export function DashboardSidebar() {
                   <Link href={item.href}>
                     <div
                       className={cn(
-                        "group relative flex items-center rounded-2xl border transition-all",
-                        collapsed ? "justify-center px-1.5 py-2.5" : "gap-3 px-3 py-3",
+                        "group relative flex items-center rounded-lg transition-all",
+                        collapsed ? "justify-center px-1.5 py-2" : "gap-2.5 px-2.5 py-2",
                         isActive
-                          ? "border-primary/20 bg-primary/10 shadow-sm"
-                          : "border-transparent bg-transparent hover:border-border/60 hover:bg-background/80",
+                          ? "bg-primary/10 text-foreground"
+                          : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                       )}
                     >
                       <div
                         className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors",
-                          isActive ? "bg-primary text-primary-foreground" : "bg-surface-secondary text-muted-foreground group-hover:text-foreground",
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+                          isActive ? "bg-primary text-primary-foreground" : "text-inherit",
                         )}
                       >
-                        <item.icon className="icon-sm" />
+                        <item.icon className="h-3.5 w-3.5" />
                       </div>
                       {!collapsed && (
-                        <div className="min-w-0 flex-1">
-                          <p className={cn("truncate text-sm font-medium", isActive ? "text-foreground" : "text-foreground/90")}>
-                            {item.name}
-                          </p>
-                        </div>
+                        <p className={cn("truncate text-xs", isActive ? "font-medium" : "font-normal")}>
+                          {item.name}
+                        </p>
                       )}
-                      {isActive && (
-                        <span className={cn(
-                          "absolute rounded-full bg-primary",
-                          collapsed
-                            ? "bottom-1 left-1/2 h-1 w-4 -translate-x-1/2"
-                            : "right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2"
-                        )} />
+                      {isActive && !collapsed && (
+                        <span className="absolute right-2 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-primary" />
                       )}
                     </div>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right">{item.hint}</TooltipContent>
+                <TooltipContent side="right" className="text-xs">{item.hint}</TooltipContent>
               </Tooltip>
             )
           })}
         </nav>
       </div>
 
-      <div className={cn("border-t border-border/70 py-4", collapsed ? "px-2" : "px-4")}>
+      <div className={cn("border-t border-border/50 py-3", collapsed ? "px-2" : "px-3")}>
         {collapsed ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex justify-center">
-                <HealthIcon className={cn("icon-md", healthColor)} />
+                <HealthIcon className={cn("h-4 w-4", healthColor)} />
               </div>
             </TooltipTrigger>
-            <TooltipContent side="right">System: {health.label}</TooltipContent>
+            <TooltipContent side="right" className="text-xs">System: {health.label}</TooltipContent>
           </Tooltip>
         ) : (
-          <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-2">
-            <HealthIcon className={cn("icon-sm", healthColor)} />
-            <span className="text-xs text-muted-foreground">System status</span>
-            <span className={cn("text-xs font-medium", healthColor)}>{health.label}</span>
+          <div className="flex items-center gap-2 rounded-lg bg-background/40 px-2.5 py-1.5">
+            <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", healthBg)} />
+            <span className="text-[11px] text-muted-foreground/70">System</span>
+            <span className={cn("text-[11px] font-medium ml-auto", healthColor)}>{health.label}</span>
           </div>
         )}
       </div>
@@ -239,7 +232,7 @@ export function DashboardSidebar() {
       {/* Mobile drawer */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 border-r border-border/70 bg-surface/95 backdrop-blur-xl transition-transform duration-300 flex flex-col lg:hidden",
+          "fixed inset-y-0 left-0 z-50 w-56 border-r border-border/50 bg-surface/95 backdrop-blur-xl transition-transform duration-300 flex flex-col lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -249,8 +242,8 @@ export function DashboardSidebar() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "group/sidebar relative hidden border-r border-border/70 bg-surface/80 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col",
-          collapsed ? "lg:w-[68px]" : "lg:w-72",
+          "group/sidebar relative hidden border-r border-border/50 bg-surface/80 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col",
+          collapsed ? "lg:w-[56px]" : "lg:w-56",
         )}
       >
         {sidebarContent}
@@ -260,9 +253,9 @@ export function DashboardSidebar() {
             <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
-              className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground shadow-md transition-all duration-200 hover:bg-surface-secondary hover:text-foreground hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:flex opacity-0 group-hover/sidebar:opacity-100"
+              className="absolute -right-3 top-16 z-10 hidden h-5 w-5 items-center justify-center rounded-full border border-border/50 bg-background text-muted-foreground shadow-sm transition-all duration-200 hover:bg-surface-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:flex opacity-0 group-hover/sidebar:opacity-100"
             >
-              <ChevronLeft className={cn("h-3.5 w-3.5 transition-transform duration-300", collapsed && "rotate-180")} />
+              <ChevronLeft className={cn("h-3 w-3 transition-transform duration-300", collapsed && "rotate-180")} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="text-xs">
