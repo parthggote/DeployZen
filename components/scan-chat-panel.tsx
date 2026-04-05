@@ -13,7 +13,6 @@ import {
   Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 interface ChatMessage {
@@ -203,8 +202,8 @@ export function ScanChatPanel({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <ScrollArea className="flex-1">
+    <div className="flex h-full flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div ref={scrollRef} className="space-y-3 p-3">
           {chatHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
@@ -284,9 +283,9 @@ export function ScanChatPanel({
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
-      <div className="border-t border-border/50 p-2">
+      <div className="shrink-0 border-t border-border/50 p-2">
         {selectedFindingIndex !== null && (
           <p className="mb-1.5 text-[10px] text-muted-foreground px-1">
             Context: Finding #{selectedFindingIndex + 1}
