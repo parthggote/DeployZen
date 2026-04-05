@@ -58,16 +58,18 @@ export async function checkInferenceAvailability(
   token: string
 ): Promise<HFInferenceAvailability> {
   try {
-    const res = await fetch(`${HF_API_BASE}/models/${modelId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const res = await fetch(
+      `${HF_API_BASE}/models/${modelId}?expand[]=inferenceProviderMapping`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
     if (!res.ok) {
       return { available: false, provider: null, providerId: null, reason: `Model not found (${res.status})` }
     }
 
     const data = await res.json()
-    const mapping = data.inferenceProviderMapping as Record<string, { provider: string; providerId: string; status: string }> | undefined
+    const mapping = data.inferenceProviderMapping as
+      Record<string, { status: string; providerId: string; task: string }> | undefined
 
     if (!mapping || Object.keys(mapping).length === 0) {
       return {
@@ -78,16 +80,18 @@ export async function checkInferenceAvailability(
       }
     }
 
-    const preferredOrder = ["hf-inference", "together", "fireworks-ai", "replicate", "sambanova", "cerebras"]
+    const preferredOrder = ["hf-inference", "together", "fireworks-ai", "replicate", "sambanova", "cerebras", "fal-ai", "nebius"]
+
     for (const pref of preferredOrder) {
-      if (mapping[pref] && mapping[pref].status === "loaded") {
-        return { available: true, provider: pref, providerId: mapping[pref].providerId }
+      const entry = mapping[pref]
+      if (entry && (entry.status === "live" || entry.status === "loaded")) {
+        return { available: true, provider: pref, providerId: entry.providerId }
       }
     }
 
-    const firstActive = Object.entries(mapping).find(([, v]) => v.status === "loaded")
-    if (firstActive) {
-      return { available: true, provider: firstActive[0], providerId: firstActive[1].providerId }
+    const firstLive = Object.entries(mapping).find(([, v]) => v.status === "live" || v.status === "loaded")
+    if (firstLive) {
+      return { available: true, provider: firstLive[0], providerId: firstLive[1].providerId }
     }
 
     const firstAny = Object.entries(mapping)[0]
@@ -119,6 +123,7 @@ export async function searchHuggingFaceModels(
     sort: "downloads",
     direction: "-1",
     limit: "20",
+    "expand[]": "inferenceProviderMapping",
   })
 
   if (task) {
@@ -159,9 +164,10 @@ export async function getHuggingFaceModelInfo(
   modelId: string,
   token: string
 ): Promise<HFModelInfo> {
-  const res = await fetch(`${HF_API_BASE}/models/${modelId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const res = await fetch(
+    `${HF_API_BASE}/models/${modelId}?expand[]=inferenceProviderMapping`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
 
   if (!res.ok) {
     if (res.status === 404) {
