@@ -12,39 +12,16 @@ const SCAN_TIMEOUT_MS = 300_000;
 const MAX_FILE_BYTES = Number(process.env.SEMGREP_MAX_FILE_BYTES || 1024 * 1024);
 const MAX_BATCH_FILES = Number(process.env.SEMGREP_MAX_BATCH_FILES || 20);
 const SEMGREP_TIMEOUT_SECONDS = Number(process.env.SEMGREP_TIMEOUT_SECONDS || 5);
-const SEMGREP_TIMEOUT_THRESHOLD = Number(process.env.SEMGREP_TIMEOUT_THRESHOLD || 1);
-const SEMGREP_MAX_MEMORY_MB = Number(process.env.SEMGREP_MAX_MEMORY_MB || 256);
 const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build", "vendor"]);
 const SCANNABLE_EXTENSIONS = new Set([
-  ".js",
-  ".jsx",
-  ".ts",
-  ".tsx",
-  ".mjs",
-  ".cjs",
-  ".json",
-  ".py",
-  ".java",
-  ".go",
-  ".rb",
-  ".php",
-  ".rs",
-  ".kt",
-  ".kts",
-  ".cs",
-  ".scala",
-  ".swift",
-  ".tf",
-  ".yaml",
-  ".yml",
-  ".sh",
-  ".bash",
-  ".sql",
-  ".html",
-  ".xml",
-  ".dockerfile",
+  ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".json",
+  ".py", ".java", ".go", ".rb", ".php", ".rs", ".kt", ".kts",
+  ".cs", ".scala", ".swift", ".tf", ".yaml", ".yml",
+  ".sh", ".bash", ".sql", ".html", ".xml", ".dockerfile",
 ]);
 const SCANNABLE_FILENAMES = new Set(["dockerfile"]);
+
+let activeScanId = null;
 
 /**
  * Recursively walks a directory and returns a flat list of file entries
@@ -232,58 +209,68 @@ function extractCategory(ruleId) {
 }
 
 /**
- * Runs Semgrep on a set of files and returns parsed findings
+ * Runs Semgrep on a set of files and returns findings plus any error
  * @param {string[]} targets - Absolute paths to scan
  * @param {string} basePath - Base path for relative file paths
- * @returns {Promise<Array>} Parsed findings for this batch
+ * @returns {Promise<{findings: Array, error: string|null}>} Findings and optional error
  */
 async function runSemgrep(targets, basePath) {
-  if (!targets.length) return [];
+  if (!targets.length) return { findings: [], error: null };
 
   try {
     const result = await runProcess(
       "semgrep",
       [
-        "--config",
-        "auto",
+        "--config", "auto",
         "--json",
-        "--jobs",
-        "1",
-        "--max-memory",
-        String(SEMGREP_MAX_MEMORY_MB),
-        "--max-target-bytes",
-        String(MAX_FILE_BYTES),
-        "--timeout",
-        String(SEMGREP_TIMEOUT_SECONDS),
-        "--timeout-threshold",
-        String(SEMGREP_TIMEOUT_THRESHOLD),
-        "--metrics",
-        "off",
-        "--disable-version-check",
+        "--jobs", "1",
+        "--timeout", String(SEMGREP_TIMEOUT_SECONDS),
+        "--metrics", "off",
         ...targets,
       ],
       { timeoutMs: SCAN_TIMEOUT_MS }
     );
 
-    const output = result.stdout || result.stderr || "";
-    if (!output) return [];
-
-    if (result.code !== 0 && result.code !== 1) {
-      console.warn(`[semgrep] exited with code ${result.code}${result.signal ? ` (${result.signal})` : ""}`);
+    if (result.stderr) {
+      console.warn(`[semgrep] stderr: ${result.stderr.slice(0, 300)}`);
     }
 
-    return parseSemgrepOutput(JSON.parse(output), basePath);
+    const output = result.stdout || "";
+    if (!output.trim()) {
+      if (result.code !== 0 && result.code !== 1) {
+        return {
+          findings: [],
+          error: `Semgrep exited with code ${result.code}: ${(result.stderr || "").slice(0, 200)}`,
+        };
+      }
+      return { findings: [], error: null };
+    }
+
+    const findings = parseSemgrepOutput(JSON.parse(output), basePath);
+
+    if (result.code !== 0 && result.code !== 1) {
+      const errMsg = `Semgrep exited with code ${result.code}${result.signal ? ` (${result.signal})` : ""}: ${(result.stderr || "").slice(0, 200)}`;
+      console.warn(`[semgrep] ${errMsg}`);
+      return { findings, error: errMsg };
+    }
+
+    return { findings, error: null };
   } catch (error) {
     if (error.stdout) {
       try {
-        return parseSemgrepOutput(JSON.parse(String(error.stdout)), basePath);
+        const findings = parseSemgrepOutput(JSON.parse(String(error.stdout)), basePath);
+        return { findings, error: `Semgrep error (partial results): ${error.message}` };
       } catch {
         console.error(`[semgrep] Failed to parse stdout: ${String(error.stdout).slice(0, 400)}`);
       }
     }
 
+    if (error.stderr) {
+      console.error(`[semgrep] stderr: ${String(error.stderr).slice(0, 400)}`);
+    }
+
     console.error(`[semgrep] Failed: ${error.message}`);
-    return [];
+    return { findings: [], error: error.message };
   }
 }
 
@@ -344,31 +331,54 @@ function enrichFileTree(fileTree, findings) {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    busy: activeScanId !== null,
+    activeScanId,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /**
  * Runs the scan pipeline and streams results back via callbacks
  * @param {object} job - Scan job definition
  */
-async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, scanId }) {
+async function runScanJob({ repoFullName, accessToken, commitSha, branch, callbackUrl, scanId }) {
   const localScanId = scanId || uuidv4();
   const tmpDir = path.join("/tmp", `scan-${localScanId}`);
 
-  console.log(`[scan:${localScanId}] Starting scan for ${repoFullName}`);
+  console.log(`[scan:${localScanId}] Starting scan for ${repoFullName} @ ${commitSha?.slice(0, 7) || "HEAD"}`);
 
   try {
     const cloneUrl = `https://x-access-token:${accessToken}@github.com/${repoFullName}.git`;
 
-    console.log(`[scan:${localScanId}] Cloning repo...`);
-    const cloneResult = await runProcess(
+    console.log(`[scan:${localScanId}] Fetching commit ${commitSha?.slice(0, 7) || "HEAD"}...`);
+
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const initResult = await runProcess("git", ["init", tmpDir], { timeoutMs: 10_000 });
+    if (initResult.code !== 0) {
+      throw new Error(initResult.stderr || `git init failed with code ${initResult.code}`);
+    }
+
+    const fetchResult = await runProcess(
       "git",
-      ["clone", "--depth", "1", cloneUrl, tmpDir],
+      ["-C", tmpDir, "fetch", "--depth", "1", cloneUrl, commitSha || (branch || "HEAD")],
       { timeoutMs: 120_000 }
     );
-    if (cloneResult.code !== 0) {
-      throw new Error(cloneResult.stderr || cloneResult.stdout || `git clone failed with code ${cloneResult.code}`);
+    if (fetchResult.code !== 0) {
+      throw new Error(fetchResult.stderr || `git fetch failed with code ${fetchResult.code}`);
     }
+
+    const checkoutResult = await runProcess(
+      "git",
+      ["-C", tmpDir, "checkout", "FETCH_HEAD"],
+      { timeoutMs: 30_000 }
+    );
+    if (checkoutResult.code !== 0) {
+      throw new Error(checkoutResult.stderr || `git checkout failed with code ${checkoutResult.code}`);
+    }
+
     console.log(`[scan:${localScanId}] Clone complete`);
 
     const fullFileTree = walkDir(tmpDir, tmpDir);
@@ -412,6 +422,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
     );
 
     const allFindings = [];
+    const batchErrors = [];
     const scannedDirs = [];
     let scannedFileCount = 0;
     let completedBatches = 0;
@@ -424,7 +435,19 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
 
       for (let batchIndex = 0; batchIndex < target.batches.length; batchIndex++) {
         const batch = target.batches[batchIndex];
-        const batchFindings = batch.length > 0 ? await runSemgrep(batch, tmpDir) : [];
+        const { findings: batchFindings, error: batchError } =
+          batch.length > 0 ? await runSemgrep(batch, tmpDir) : { findings: [], error: null };
+
+        if (batchError) {
+          const errorEntry = {
+            directory: target.name,
+            batch: batchIndex + 1,
+            filesInBatch: batch.length,
+            error: batchError,
+          };
+          batchErrors.push(errorEntry);
+          console.warn(`[scan:${localScanId}] Batch error in ${target.name}: ${batchError}`);
+        }
 
         allFindings.push(...batchFindings);
         scannedFileCount += batch.length;
@@ -449,11 +472,12 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
             currentDir: target.name,
             progressPercent,
             stageLabel,
+            batchErrors: batchErrors.length,
             stats: {
               total: allFindings.length,
-              critical: allFindings.filter((finding) => finding.severity === "ERROR").length,
-              warning: allFindings.filter((finding) => finding.severity === "WARNING").length,
-              info: allFindings.filter((finding) => finding.severity === "INFO").length,
+              critical: allFindings.filter((f) => f.severity === "ERROR").length,
+              warning: allFindings.filter((f) => f.severity === "WARNING").length,
+              info: allFindings.filter((f) => f.severity === "INFO").length,
               filesScanned: scannedFileCount,
             },
           });
@@ -467,22 +491,32 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
     const enrichedFullTree = enrichFileTree(fullFileTree, allFindings);
     const stats = {
       total: allFindings.length,
-      critical: allFindings.filter((finding) => finding.severity === "ERROR").length,
-      warning: allFindings.filter((finding) => finding.severity === "WARNING").length,
-      info: allFindings.filter((finding) => finding.severity === "INFO").length,
+      critical: allFindings.filter((f) => f.severity === "ERROR").length,
+      warning: allFindings.filter((f) => f.severity === "WARNING").length,
+      info: allFindings.filter((f) => f.severity === "INFO").length,
       filesScanned: scannedFileCount,
     };
 
+    const hasErrors = batchErrors.length > 0;
+    const status = hasErrors && allFindings.length === 0 ? "failed" : "completed";
+
     if (callbackUrl) {
       await finalizeScan(callbackUrl, {
-        status: "completed",
+        status,
         findings: allFindings,
         fileTree: enrichedFullTree,
         stats,
+        batchErrors: hasErrors ? batchErrors : undefined,
+        error: hasErrors
+          ? `${batchErrors.length} batch(es) failed during scan. Results may be incomplete.`
+          : undefined,
       });
     }
 
-    console.log(`[scan:${localScanId}] Done - ${allFindings.length} findings, ${enrichedFullTree.length} tree entries`);
+    console.log(
+      `[scan:${localScanId}] Done - ${allFindings.length} findings, ${enrichedFullTree.length} tree entries` +
+      (hasErrors ? `, ${batchErrors.length} batch errors` : "")
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[scan:${localScanId}] Failed: ${message}`);
@@ -494,6 +528,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
       });
     }
   } finally {
+    activeScanId = null;
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
@@ -503,7 +538,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
 }
 
 /**
- * POST /scan - Accepts a scan job and processes it asynchronously
+ * POST /scan - Accepts a scan job if the worker is not busy
  */
 app.post("/scan", async (req, res) => {
   const { repoFullName, accessToken, commitSha } = req.body;
@@ -512,12 +547,22 @@ app.post("/scan", async (req, res) => {
     return res.status(400).json({ error: "Missing required fields: repoFullName, accessToken, commitSha" });
   }
 
+  if (activeScanId !== null) {
+    return res.status(429).json({
+      error: "Worker is busy with another scan",
+      activeScanId,
+      retryAfter: 30,
+    });
+  }
+
   const scanId = req.body.scanId || uuidv4();
+  activeScanId = scanId;
 
   runScanJob({
     ...req.body,
     scanId,
   }).catch((error) => {
+    activeScanId = null;
     console.error(`[scan:${scanId}] Background job crashed: ${error instanceof Error ? error.message : String(error)}`);
   });
 

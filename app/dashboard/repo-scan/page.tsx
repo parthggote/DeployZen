@@ -180,7 +180,7 @@ export default function RepoScanPage() {
         }
       }
 
-      if (scan.status === "completed") {
+      if (scan.status === "completed" || scan.status === "completed_with_errors") {
         stopPolling()
         setFullScan(scan)
         setExplanations(scan.aiExplanations || {})
@@ -918,6 +918,16 @@ function ScanResultsView({
           findingCount={scan.findings.length}
           newFindingCount={newFindingCount}
         />
+      )}
+
+      {/* Partial-failure warning */}
+      {!scanning && scan.status === "completed_with_errors" && (
+        <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
+          <AlertTriangle className="icon-xs text-warning shrink-0" />
+          <p className="text-xs text-warning">
+            {scan.error || "Some directories failed to scan. Results may be incomplete."}
+          </p>
+        </div>
       )}
 
       {/* Header */}

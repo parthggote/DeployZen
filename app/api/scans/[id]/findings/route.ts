@@ -30,6 +30,7 @@ interface IncrementalPayload {
   currentDir: string | null
   progressPercent?: number
   stageLabel?: string
+  batchErrors?: number
   stats: {
     total: number
     critical: number
@@ -39,11 +40,19 @@ interface IncrementalPayload {
   }
 }
 
+interface BatchError {
+  directory: string
+  batch: number
+  filesInBatch: number
+  error: string
+}
+
 interface CompletionPayload {
   status: "completed" | "failed"
   error?: string
   findings?: Finding[]
   fileTree?: FileTreeEntry[]
+  batchErrors?: BatchError[]
   stats?: {
     total: number
     critical: number
@@ -231,23 +240,31 @@ export async function POST(
     }
 
     const summary = buildSummary(findings, stats)
+    const hasBatchErrors = payload.batchErrors && payload.batchErrors.length > 0
+    const finalStatus = hasBatchErrors ? "completed_with_errors" : "completed"
+    const stageLabel = hasBatchErrors ? "Complete (partial)" : "Complete"
 
     await db.collection("scans").updateOne(
       { _id: new ObjectId(id) },
       {
         $set: {
-          status: "completed",
+          status: finalStatus,
           completedAt: new Date().toISOString(),
           findings,
           fileTree,
           summary,
-          progress: { stage: "Complete", percent: 100, updatedAt: new Date().toISOString() },
-          error: null,
+          progress: { stage: stageLabel, percent: 100, updatedAt: new Date().toISOString() },
+          error: payload.error || null,
+          batchErrors: hasBatchErrors ? payload.batchErrors : [],
         },
       }
     )
 
-    logger.info("Worker finalized scan", { scanId: id, findings: findings.length })
+    logger.info("Worker finalized scan", {
+      scanId: id,
+      findings: findings.length,
+      batchErrors: hasBatchErrors ? payload.batchErrors!.length : 0,
+    })
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"
