@@ -28,6 +28,8 @@ interface IncrementalPayload {
   scannedDirs: string[]
   totalDirs: number
   currentDir: string | null
+  progressPercent?: number
+  stageLabel?: string
   stats: {
     total: number
     critical: number
@@ -109,7 +111,9 @@ export async function PATCH(
     const client = await clientPromise
     const db = client.db("DeployZen")
 
-    const percent = Math.min(90, Math.round((scannedDirs.length / totalDirs) * 85) + 10)
+    const percent = typeof payload.progressPercent === "number"
+      ? payload.progressPercent
+      : Math.min(90, Math.round((scannedDirs.length / totalDirs) * 85) + 10)
 
     const existingDoc = await db.collection("scans").findOne(
       { _id: new ObjectId(id) },
@@ -120,9 +124,9 @@ export async function PATCH(
     const allFindings = [...existingFindings, ...findings]
     const summary = buildSummary(allFindings, stats)
 
-    const scanningLabel = currentDir
+    const scanningLabel = payload.stageLabel || (currentDir
       ? `Scanning: ${currentDir}`
-      : `Scanned ${scannedDirs.length}/${totalDirs} directories`
+      : `Scanned ${scannedDirs.length}/${totalDirs} directories`)
 
     const existingPaths = new Set<string>()
     if (existingDoc?.fileTree) {

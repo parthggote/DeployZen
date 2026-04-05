@@ -1,5 +1,5 @@
 const express = require("express");
-const { execSync, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
@@ -10,8 +10,41 @@ app.use(express.json({ limit: "1mb" }));
 const PORT = process.env.PORT || 4000;
 const SCAN_TIMEOUT_MS = 300_000;
 const MAX_FILE_BYTES = Number(process.env.SEMGREP_MAX_FILE_BYTES || 1024 * 1024);
-const MAX_BATCH_FILES = Number(process.env.SEMGREP_MAX_BATCH_FILES || 100);
+const MAX_BATCH_FILES = Number(process.env.SEMGREP_MAX_BATCH_FILES || 20);
+const SEMGREP_TIMEOUT_SECONDS = Number(process.env.SEMGREP_TIMEOUT_SECONDS || 5);
+const SEMGREP_TIMEOUT_THRESHOLD = Number(process.env.SEMGREP_TIMEOUT_THRESHOLD || 1);
+const SEMGREP_MAX_MEMORY_MB = Number(process.env.SEMGREP_MAX_MEMORY_MB || 256);
 const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build", "vendor"]);
+const SCANNABLE_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".json",
+  ".py",
+  ".java",
+  ".go",
+  ".rb",
+  ".php",
+  ".rs",
+  ".kt",
+  ".kts",
+  ".cs",
+  ".scala",
+  ".swift",
+  ".tf",
+  ".yaml",
+  ".yml",
+  ".sh",
+  ".bash",
+  ".sql",
+  ".html",
+  ".xml",
+  ".dockerfile",
+]);
+const SCANNABLE_FILENAMES = new Set(["dockerfile"]);
 
 /**
  * Recursively walks a directory and returns a flat list of file entries
@@ -42,6 +75,17 @@ function walkDir(dir, base) {
 }
 
 /**
+ * Determines if a file is likely useful for Semgrep analysis
+ * @param {string} filePath - Absolute file path
+ * @returns {boolean} Whether the file should be scanned
+ */
+function isScannableFile(filePath) {
+  const fileName = path.basename(filePath).toLowerCase();
+  const extension = path.extname(filePath).toLowerCase();
+  return SCANNABLE_FILENAMES.has(fileName) || SCANNABLE_EXTENSIONS.has(extension);
+}
+
+/**
  * Recursively collects scannable files below a directory while skipping oversized files
  * @param {string} dir - Directory to walk
  * @returns {string[]} Absolute file paths
@@ -60,7 +104,7 @@ function collectScannableFiles(dir) {
     }
 
     const stats = fs.statSync(fullPath);
-    if (stats.size > MAX_FILE_BYTES) continue;
+    if (stats.size > MAX_FILE_BYTES || !isScannableFile(fullPath)) continue;
     files.push(fullPath);
   }
 
@@ -79,6 +123,65 @@ function chunkItems(items, batchSize) {
     batches.push(items.slice(i, i + batchSize));
   }
   return batches;
+}
+
+/**
+ * Runs a child process without blocking the Node event loop
+ * @param {string} command - Executable name
+ * @param {string[]} args - Process args
+ * @param {{ cwd?: string, timeoutMs?: number }} options - Execution options
+ * @returns {Promise<{stdout: string, stderr: string, code: number | null, signal: NodeJS.Signals | null}>}
+ */
+function runProcess(command, args, options = {}) {
+  const { cwd, timeoutMs } = options;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGKILL");
+        }, timeoutMs)
+      : null;
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      if (timer) clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (code, signal) => {
+      if (timer) clearTimeout(timer);
+
+      if (timedOut) {
+        const error = new Error(`${command} timed out after ${timeoutMs}ms`);
+        error.stdout = stdout;
+        error.stderr = stderr;
+        error.code = code;
+        error.signal = signal;
+        reject(error);
+        return;
+      }
+
+      resolve({ stdout, stderr, code, signal });
+    });
+  });
 }
 
 /**
@@ -116,7 +219,7 @@ function mapSeverity(severity) {
 
 /**
  * Extracts a human-readable category from a Semgrep rule ID
- * @param {string} ruleId - Full Semgrep rule ID (e.g. "python.django.security.injection.sql")
+ * @param {string} ruleId - Full Semgrep rule ID
  * @returns {string} Category name
  */
 function extractCategory(ruleId) {
@@ -132,53 +235,56 @@ function extractCategory(ruleId) {
  * Runs Semgrep on a set of files and returns parsed findings
  * @param {string[]} targets - Absolute paths to scan
  * @param {string} basePath - Base path for relative file paths
- * @returns {Array} Parsed findings for this directory
+ * @returns {Promise<Array>} Parsed findings for this batch
  */
-function runSemgrep(targets, basePath) {
+async function runSemgrep(targets, basePath) {
   if (!targets.length) return [];
 
   try {
-    const result = spawnSync(
+    const result = await runProcess(
       "semgrep",
-      ["--config", "auto", "--json", ...targets],
-      { timeout: SCAN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024, stdio: "pipe", encoding: "utf8" }
+      [
+        "--config",
+        "auto",
+        "--json",
+        "--jobs",
+        "1",
+        "--max-memory",
+        String(SEMGREP_MAX_MEMORY_MB),
+        "--max-target-bytes",
+        String(MAX_FILE_BYTES),
+        "--timeout",
+        String(SEMGREP_TIMEOUT_SECONDS),
+        "--timeout-threshold",
+        String(SEMGREP_TIMEOUT_THRESHOLD),
+        "--metrics",
+        "off",
+        "--disable-version-check",
+        ...targets,
+      ],
+      { timeoutMs: SCAN_TIMEOUT_MS }
     );
-
-    if (result.error) {
-      throw result.error;
-    }
 
     const output = result.stdout || result.stderr || "";
     if (!output) return [];
 
+    if (result.code !== 0 && result.code !== 1) {
+      console.warn(`[semgrep] exited with code ${result.code}${result.signal ? ` (${result.signal})` : ""}`);
+    }
+
     return parseSemgrepOutput(JSON.parse(output), basePath);
-  } catch (err) {
-    if (err.stdout) {
+  } catch (error) {
+    if (error.stdout) {
       try {
-        return parseSemgrepOutput(JSON.parse(err.stdout.toString()), basePath);
+        return parseSemgrepOutput(JSON.parse(String(error.stdout)), basePath);
       } catch {
-        return [];
+        console.error(`[semgrep] Failed to parse stdout: ${String(error.stdout).slice(0, 400)}`);
       }
     }
+
+    console.error(`[semgrep] Failed: ${error.message}`);
     return [];
   }
-}
-
-/**
- * Runs Semgrep across a directory in batches to avoid large target timeouts
- * @param {string[]} targets - Absolute file paths to scan
- * @param {string} basePath - Base path for relative file paths
- * @returns {Array} Combined findings
- */
-function scanFileBatches(targets, basePath) {
-  const findings = [];
-  const batches = chunkItems(targets, MAX_BATCH_FILES);
-
-  for (const batch of batches) {
-    findings.push(...runSemgrep(batch, basePath));
-  }
-
-  return findings;
 }
 
 /**
@@ -193,8 +299,8 @@ async function sendPartialResults(callbackUrl, payload) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-  } catch (err) {
-    console.error(`[callback] Failed to send partial results: ${err.message}`);
+  } catch (error) {
+    console.error(`[callback] Failed to send partial results: ${error.message}`);
   }
 }
 
@@ -210,8 +316,8 @@ async function finalizeScan(callbackUrl, payload) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-  } catch (err) {
-    console.error(`[callback] Failed to send final scan state: ${err.message}`);
+  } catch (error) {
+    console.error(`[callback] Failed to send final scan state: ${error.message}`);
   }
 }
 
@@ -223,13 +329,14 @@ async function finalizeScan(callbackUrl, payload) {
  */
 function enrichFileTree(fileTree, findings) {
   const findingCountByPath = {};
-  for (const f of findings) {
-    findingCountByPath[f.filePath] = (findingCountByPath[f.filePath] || 0) + 1;
-    const dir = path.dirname(f.filePath);
+  for (const finding of findings) {
+    findingCountByPath[finding.filePath] = (findingCountByPath[finding.filePath] || 0) + 1;
+    const dir = path.dirname(finding.filePath);
     if (dir !== ".") {
       findingCountByPath[dir] = (findingCountByPath[dir] || 0) + 1;
     }
   }
+
   return fileTree.map((entry) => ({
     ...entry,
     findingCount: findingCountByPath[entry.path] || 0,
@@ -254,85 +361,115 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
     const cloneUrl = `https://x-access-token:${accessToken}@github.com/${repoFullName}.git`;
 
     console.log(`[scan:${localScanId}] Cloning repo...`);
-    execSync(
-      `git clone --depth 1 "${cloneUrl}" "${tmpDir}"`,
-      { timeout: 120_000, stdio: "pipe" }
+    const cloneResult = await runProcess(
+      "git",
+      ["clone", "--depth", "1", cloneUrl, tmpDir],
+      { timeoutMs: 120_000 }
     );
-    execSync(`git -C "${tmpDir}" checkout --force "${commitSha}"`, { timeout: 60_000, stdio: "pipe" });
+    if (cloneResult.code !== 0) {
+      throw new Error(cloneResult.stderr || cloneResult.stdout || `git clone failed with code ${cloneResult.code}`);
+    }
     console.log(`[scan:${localScanId}] Clone complete`);
 
     const fullFileTree = walkDir(tmpDir, tmpDir);
-
     const topLevelItems = fs.readdirSync(tmpDir, { withFileTypes: true });
-    const scanTargets = [];
-
+    const topLevelTargets = [];
     const topLevelFiles = [];
+
     for (const item of topLevelItems) {
       if (SKIP_DIRS.has(item.name)) continue;
+
+      const fullPath = path.join(tmpDir, item.name);
       if (item.isDirectory()) {
-        scanTargets.push({ name: item.name, path: path.join(tmpDir, item.name) });
-      } else {
-        topLevelFiles.push(path.join(tmpDir, item.name));
+        topLevelTargets.push({ name: item.name, path: fullPath });
+      } else if (isScannableFile(fullPath)) {
+        const stats = fs.statSync(fullPath);
+        if (stats.size <= MAX_FILE_BYTES) {
+          topLevelFiles.push(fullPath);
+        }
       }
     }
 
     if (topLevelFiles.length > 0) {
-      scanTargets.unshift({ name: "(root files)", path: tmpDir, rootOnly: true });
+      topLevelTargets.unshift({ name: "(root files)", path: tmpDir, rootOnly: true });
     }
 
+    const scanTargets = topLevelTargets.map((target) => {
+      const files = target.rootOnly ? topLevelFiles : collectScannableFiles(target.path);
+      const batches = chunkItems(files, MAX_BATCH_FILES);
+
+      return {
+        ...target,
+        files,
+        batches: batches.length > 0 ? batches : [[]],
+      };
+    });
+
     const totalTargets = scanTargets.length;
+    const totalBatches = Math.max(
+      1,
+      scanTargets.reduce((sum, target) => sum + target.batches.length, 0)
+    );
+
     const allFindings = [];
     const scannedDirs = [];
     let scannedFileCount = 0;
+    let completedBatches = 0;
 
-    for (let i = 0; i < scanTargets.length; i++) {
-      const target = scanTargets[i];
-      const targetFiles = target.rootOnly
-        ? topLevelFiles
-            .filter((filePath) => fs.statSync(filePath).size <= MAX_FILE_BYTES)
-        : collectScannableFiles(target.path);
+    for (let targetIndex = 0; targetIndex < scanTargets.length; targetIndex++) {
+      const target = scanTargets[targetIndex];
+      let targetFindingCount = 0;
 
-      console.log(`[scan:${localScanId}] Scanning ${target.name} (${i + 1}/${totalTargets})...`);
+      console.log(`[scan:${localScanId}] Scanning ${target.name} (${targetIndex + 1}/${totalTargets})...`);
 
-      const dirFindings = scanFileBatches(targetFiles, tmpDir);
-      scannedFileCount += targetFiles.length;
+      for (let batchIndex = 0; batchIndex < target.batches.length; batchIndex++) {
+        const batch = target.batches[batchIndex];
+        const batchFindings = batch.length > 0 ? await runSemgrep(batch, tmpDir) : [];
 
-      allFindings.push(...dirFindings);
-      scannedDirs.push(target.name);
+        allFindings.push(...batchFindings);
+        scannedFileCount += batch.length;
+        targetFindingCount += batchFindings.length;
+        completedBatches += 1;
 
-      if (callbackUrl) {
-        const dirTree = target.rootOnly
-          ? fullFileTree.filter((e) => !e.path.includes("/"))
-          : fullFileTree.filter((e) => e.path === target.name || e.path.startsWith(target.name + "/"));
+        if (callbackUrl) {
+          const dirTree = target.rootOnly
+            ? fullFileTree.filter((entry) => !entry.path.includes("/"))
+            : fullFileTree.filter((entry) => entry.path === target.name || entry.path.startsWith(`${target.name}/`));
 
-        const enrichedDirTree = enrichFileTree(dirTree, allFindings);
+          const enrichedDirTree = enrichFileTree(dirTree, allFindings);
+          const progressPercent = Math.min(90, Math.round((completedBatches / totalBatches) * 80) + 10);
+          const stageLabel = `Scanning: ${target.name}${target.batches.length > 1 ? ` (${batchIndex + 1}/${target.batches.length})` : ""}`;
 
-        await sendPartialResults(callbackUrl, {
-          directory: target.name,
-          findings: dirFindings,
-          fileTree: enrichedDirTree,
-          scannedDirs,
-          totalDirs: totalTargets,
-          currentDir: scanTargets[i + 1]?.name || null,
-          stats: {
-            total: allFindings.length,
-            critical: allFindings.filter((f) => f.severity === "ERROR").length,
-            warning: allFindings.filter((f) => f.severity === "WARNING").length,
-            info: allFindings.filter((f) => f.severity === "INFO").length,
-            filesScanned: scannedFileCount,
-          },
-        });
+          await sendPartialResults(callbackUrl, {
+            directory: target.name,
+            findings: batchFindings,
+            fileTree: enrichedDirTree,
+            scannedDirs,
+            totalDirs: totalTargets,
+            currentDir: target.name,
+            progressPercent,
+            stageLabel,
+            stats: {
+              total: allFindings.length,
+              critical: allFindings.filter((finding) => finding.severity === "ERROR").length,
+              warning: allFindings.filter((finding) => finding.severity === "WARNING").length,
+              info: allFindings.filter((finding) => finding.severity === "INFO").length,
+              filesScanned: scannedFileCount,
+            },
+          });
+        }
       }
 
-      console.log(`[scan:${localScanId}] ${target.name}: ${dirFindings.length} findings`);
+      scannedDirs.push(target.name);
+      console.log(`[scan:${localScanId}] ${target.name}: ${targetFindingCount} findings`);
     }
 
     const enrichedFullTree = enrichFileTree(fullFileTree, allFindings);
     const stats = {
       total: allFindings.length,
-      critical: allFindings.filter((f) => f.severity === "ERROR").length,
-      warning: allFindings.filter((f) => f.severity === "WARNING").length,
-      info: allFindings.filter((f) => f.severity === "INFO").length,
+      critical: allFindings.filter((finding) => finding.severity === "ERROR").length,
+      warning: allFindings.filter((finding) => finding.severity === "WARNING").length,
+      info: allFindings.filter((finding) => finding.severity === "INFO").length,
       filesScanned: scannedFileCount,
     };
 
@@ -345,7 +482,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
       });
     }
 
-    console.log(`[scan:${localScanId}] Done — ${allFindings.length} findings, ${enrichedFullTree.length} tree entries`);
+    console.log(`[scan:${localScanId}] Done - ${allFindings.length} findings, ${enrichedFullTree.length} tree entries`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[scan:${localScanId}] Failed: ${message}`);
@@ -366,7 +503,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, callbackUrl, s
 }
 
 /**
- * POST /scan — Accepts a scan job and processes it asynchronously
+ * POST /scan - Accepts a scan job and processes it asynchronously
  */
 app.post("/scan", async (req, res) => {
   const { repoFullName, accessToken, commitSha } = req.body;

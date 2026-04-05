@@ -94,12 +94,6 @@ interface FullScan {
 
 type View = "home" | "progress" | "results"
 
-const INITIAL_STAGES = [
-  "Initializing...",
-  "Connecting to worker...",
-  "Cloning repository...",
-]
-
 /**
  * Repo Scanner page — connect GitHub, scan repos, explore findings with live incremental updates
  */
