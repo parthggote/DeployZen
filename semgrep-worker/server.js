@@ -8,6 +8,12 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 4000;
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const WORKER_ID = process.env.WORKER_ID || `worker-${uuidv4().slice(0, 8)}`;
+const WORKER_SECRET = process.env.WORKER_SECRET || "";
+const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 5000);
+const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_SCANS || 1);
+
 const SCAN_TIMEOUT_MS = 300_000;
 const MAX_FILE_BYTES = Number(process.env.SEMGREP_MAX_FILE_BYTES || 1024 * 1024);
 const MAX_BATCH_FILES = Number(process.env.SEMGREP_MAX_BATCH_FILES || 20);
@@ -21,7 +27,7 @@ const SCANNABLE_EXTENSIONS = new Set([
 ]);
 const SCANNABLE_FILENAMES = new Set(["dockerfile"]);
 
-let activeScanId = null;
+let activeJobs = 0;
 
 /**
  * Recursively walks a directory and returns a flat list of file entries
@@ -276,9 +282,9 @@ async function runSemgrep(targets, basePath) {
 }
 
 /**
- * Sends partial findings to the callback URL
+ * Sends a progress-only or partial findings update to the callback URL
  * @param {string} callbackUrl - The Next.js API callback URL
- * @param {object} payload - Partial findings data
+ * @param {object} payload - Partial findings / progress data
  */
 async function sendPartialResults(callbackUrl, payload) {
   try {
@@ -331,18 +337,41 @@ function enrichFileTree(fileTree, findings) {
   }));
 }
 
+/**
+ * Sends a lightweight progress-only PATCH (no findings/file tree changes)
+ * @param {string} callbackUrl - API callback URL
+ * @param {string} stageLabel - Human-readable stage
+ * @param {number} percent - Progress percentage
+ */
+async function sendProgressUpdate(callbackUrl, stageLabel, percent) {
+  await sendPartialResults(callbackUrl, {
+    directory: "(progress)",
+    findings: [],
+    fileTree: [],
+    scannedDirs: [],
+    totalDirs: 0,
+    currentDir: null,
+    stageLabel,
+    progressPercent: percent,
+    stats: { total: 0, critical: 0, warning: 0, info: 0, filesScanned: 0 },
+  });
+}
+
+/* ── Health endpoint ── */
+
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    busy: activeScanId !== null,
-    activeScanId,
+    workerId: WORKER_ID,
+    activeJobs,
+    maxConcurrent: MAX_CONCURRENT,
     timestamp: new Date().toISOString(),
   });
 });
 
 /**
- * Runs the scan pipeline and streams results back via callbacks
- * @param {object} job - Scan job definition
+ * Runs the scan pipeline for a single job
+ * @param {object} job - Scan job claimed from the queue
  */
 async function runScanJob({ repoFullName, accessToken, commitSha, branch, callbackUrl, scanId }) {
   const localScanId = scanId || uuidv4();
@@ -352,6 +381,10 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
 
   try {
     const cloneUrl = `https://x-access-token:${accessToken}@github.com/${repoFullName}.git`;
+
+    if (callbackUrl) {
+      await sendProgressUpdate(callbackUrl, "Cloning repository...", 10);
+    }
 
     console.log(`[scan:${localScanId}] Fetching commit ${commitSha?.slice(0, 7) || "HEAD"}...`);
 
@@ -381,6 +414,10 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
     }
 
     console.log(`[scan:${localScanId}] Clone complete`);
+
+    if (callbackUrl) {
+      await sendProgressUpdate(callbackUrl, "Analyzing repository structure...", 15);
+    }
 
     const fullFileTree = walkDir(tmpDir, tmpDir);
     const topLevelItems = fs.readdirSync(tmpDir, { withFileTypes: true });
@@ -461,7 +498,7 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
             : fullFileTree.filter((entry) => entry.path === target.name || entry.path.startsWith(`${target.name}/`));
 
           const enrichedDirTree = enrichFileTree(dirTree, allFindings);
-          const progressPercent = Math.min(90, Math.round((completedBatches / totalBatches) * 80) + 10);
+          const progressPercent = Math.min(90, Math.round((completedBatches / totalBatches) * 70) + 20);
           const stageLabel = `Scanning: ${target.name}${target.batches.length > 1 ? ` (${batchIndex + 1}/${target.batches.length})` : ""}`;
 
           await sendPartialResults(callbackUrl, {
@@ -529,7 +566,6 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
       });
     }
   } finally {
-    activeScanId = null;
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
@@ -538,9 +574,48 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
   }
 }
 
+/* ── Job queue polling ── */
+
 /**
- * POST /scan - Accepts a scan job if the worker is not busy
+ * Polls the API queue for available scan jobs and runs them
  */
+async function pollForJobs() {
+  if (activeJobs >= MAX_CONCURRENT) return;
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (WORKER_SECRET) {
+      headers["Authorization"] = `Bearer ${WORKER_SECRET}`;
+    }
+
+    const res = await fetch(`${API_URL}/api/queue/next`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workerId: WORKER_ID }),
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (!data.job) return;
+
+    activeJobs++;
+    console.log(`[worker:${WORKER_ID}] Claimed job ${data.job.scanId} for ${data.job.repoFullName}`);
+
+    runScanJob(data.job)
+      .catch((err) => {
+        console.error(`[worker:${WORKER_ID}] Job ${data.job.scanId} crashed: ${err.message || err}`);
+      })
+      .finally(() => {
+        activeJobs--;
+      });
+  } catch {
+    /* poll failure is non-critical, will retry */
+  }
+}
+
+/* ── Legacy POST /scan endpoint (backward compatibility) ── */
+
 app.post("/scan", async (req, res) => {
   const { repoFullName, accessToken, commitSha } = req.body;
 
@@ -548,24 +623,28 @@ app.post("/scan", async (req, res) => {
     return res.status(400).json({ error: "Missing required fields: repoFullName, accessToken, commitSha" });
   }
 
-  if (activeScanId !== null) {
+  if (activeJobs >= MAX_CONCURRENT) {
     return res.status(429).json({
-      error: "Worker is busy with another scan",
-      activeScanId,
+      error: "Worker is busy",
+      activeJobs,
+      maxConcurrent: MAX_CONCURRENT,
       retryAfter: 30,
     });
   }
 
   const scanId = req.body.scanId || uuidv4();
-  activeScanId = scanId;
+  activeJobs++;
 
   runScanJob({
     ...req.body,
     scanId,
-  }).catch((error) => {
-    activeScanId = null;
-    console.error(`[scan:${scanId}] Background job crashed: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  })
+    .catch((error) => {
+      console.error(`[scan:${scanId}] Background job crashed: ${error instanceof Error ? error.message : String(error)}`);
+    })
+    .finally(() => {
+      activeJobs--;
+    });
 
   return res.status(202).json({
     success: true,
@@ -574,6 +653,12 @@ app.post("/scan", async (req, res) => {
   });
 });
 
+/* ── Start server + polling loop ── */
+
 app.listen(PORT, () => {
-  console.log(`Semgrep worker listening on port ${PORT}`);
+  console.log(`Semgrep worker ${WORKER_ID} listening on port ${PORT}`);
+  console.log(`Polling ${API_URL}/api/queue/next every ${POLL_INTERVAL_MS}ms (max ${MAX_CONCURRENT} concurrent)`);
+
+  pollForJobs();
+  setInterval(pollForJobs, POLL_INTERVAL_MS);
 });
