@@ -28,10 +28,12 @@ export interface ScanRecord {
   repoFullName: string
   branch: string
   commitSha: string
-  status: "pending" | "running" | "completed" | "failed"
+  status: "pending" | "running" | "completed" | "completed_with_errors" | "failed"
   startedAt: string
   completedAt: string | null
   summary: ScanSummary | null
+  error?: string | null
+  batchErrors?: Array<{ directory: string; error: string }> | null
 }
 
 interface ScanHistoryListProps {
@@ -111,18 +113,22 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
           const StatusIcon =
             scan.status === "completed"
               ? CheckCircle
-              : scan.status === "failed"
-                ? XCircle
-                : scan.status === "running"
-                  ? Loader2
-                  : Clock
+              : scan.status === "completed_with_errors"
+                ? AlertTriangle
+                : scan.status === "failed"
+                  ? XCircle
+                  : scan.status === "running"
+                    ? Loader2
+                    : Clock
 
           const statusColor =
             scan.status === "completed"
               ? "text-success"
-              : scan.status === "failed"
-                ? "text-error"
-                : "text-warning"
+              : scan.status === "completed_with_errors"
+                ? "text-warning"
+                : scan.status === "failed"
+                  ? "text-error"
+                  : "text-warning"
 
           const isConfirming = confirmingDelete === scan._id
           const isDeleting = deleting === scan._id
@@ -161,8 +167,13 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
                   </div>
                 </div>
 
-                {scan.summary && scan.status === "completed" && (
+                {scan.summary && (scan.status === "completed" || scan.status === "completed_with_errors") && (
                   <div className="flex shrink-0 items-center gap-1.5">
+                    {scan.status === "completed_with_errors" && (
+                      <Badge className="bg-warning/10 text-warning hover:bg-warning/10 text-[10px] px-1.5 py-0">
+                        partial
+                      </Badge>
+                    )}
                     {scan.summary.critical > 0 && (
                       <Badge className="bg-error/10 text-error hover:bg-error/10 text-[10px] px-1.5 py-0">
                         {scan.summary.critical}

@@ -8,6 +8,8 @@ import logger from "@/lib/logger"
 const SEMGREP_WORKER_URL = process.env.SEMGREP_WORKER_URL || "http://localhost:4000"
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL
   || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+const WORKER_RETRY_ATTEMPTS = 5
+const WORKER_RETRY_BASE_MS = 15_000
 
 interface ScanSummary {
   total: number
@@ -48,47 +50,56 @@ async function processScanInBackground(
   scanId: ObjectId,
   repoFullName: string,
   accessToken: string,
-  commitSha: string
+  commitSha: string,
+  branch: string
 ) {
   const callbackUrl = `${APP_URL}/api/scans/${scanId.toString()}/findings`
+  const payload = JSON.stringify({
+    repoFullName,
+    accessToken,
+    commitSha,
+    branch,
+    callbackUrl,
+    scanId: scanId.toString(),
+  })
 
   try {
     await updateProgress(scanId, "Connecting to worker...", 10)
 
-    const workerRes = await fetch(`${SEMGREP_WORKER_URL}/scan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repoFullName,
-        accessToken,
-        commitSha,
-        callbackUrl,
-        scanId: scanId.toString(),
-      }),
-    })
+    let accepted = false
 
-    if (!workerRes.ok) {
+    for (let attempt = 0; attempt < WORKER_RETRY_ATTEMPTS; attempt++) {
+      const workerRes = await fetch(`${SEMGREP_WORKER_URL}/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      })
+
+      if (workerRes.ok) {
+        await workerRes.json()
+        accepted = true
+        break
+      }
+
+      if (workerRes.status === 429 && attempt < WORKER_RETRY_ATTEMPTS - 1) {
+        const waitMs = WORKER_RETRY_BASE_MS * (attempt + 1)
+        logger.info("Worker busy, retrying", {
+          scanId: scanId.toString(),
+          attempt: attempt + 1,
+          waitMs,
+        })
+        await updateProgress(scanId, `Worker busy, retrying in ${Math.round(waitMs / 1000)}s...`, 8)
+        await new Promise((r) => setTimeout(r, waitMs))
+        continue
+      }
+
       const errText = await workerRes.text()
       throw new Error(`Worker returned ${workerRes.status}: ${errText}`)
     }
 
-    await workerRes.json()
-
-    const client = await clientPromise
-    const db = client.db("DeployZen")
-
-    await db.collection("scans").updateOne(
-      { _id: scanId },
-      {
-        $set: {
-          progress: {
-            stage: "Queued on worker...",
-            percent: 15,
-            updatedAt: new Date().toISOString(),
-          },
-        },
-      }
-    )
+    if (!accepted) {
+      throw new Error("Worker did not accept scan after retries")
+    }
 
     logger.info("Scan accepted by worker", { scanId: scanId.toString() })
   } catch (error: unknown) {
@@ -172,7 +183,7 @@ export async function POST(req: NextRequest) {
     const insertResult = await db.collection("scans").insertOne(scanDoc)
     const scanId = insertResult.insertedId
 
-    after(() => processScanInBackground(scanId, repoFullName, user.githubAccessToken, commitSha))
+    after(() => processScanInBackground(scanId, repoFullName, user.githubAccessToken, commitSha, targetBranch))
 
     return NextResponse.json(
       {
@@ -213,6 +224,8 @@ export async function GET() {
         completedAt: 1,
         summary: 1,
         progress: 1,
+        error: 1,
+        batchErrors: 1,
       })
       .sort({ startedAt: -1 })
       .limit(50)
