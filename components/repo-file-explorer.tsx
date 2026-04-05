@@ -276,7 +276,7 @@ export function RepoFileExplorer({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-14rem)]">
+    <ScrollArea className="h-full">
       <div className="space-y-0.5 py-1 pr-2">
         {tree.map((node) => (
           <TreeItem

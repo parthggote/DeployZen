@@ -1,10 +1,15 @@
 "use client"
 
 import { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   AlertCircle,
   AlertTriangle,
   ChevronDown,
+  Copy,
+  Check,
+  ExternalLink,
   FileCode,
   Info,
   Loader2,
@@ -38,7 +43,7 @@ interface ScanFindingsPanelProps {
 /**
  * Returns the appropriate icon and color for a finding severity level
  * @param {string} severity - Finding severity
- * @returns {{ Icon: React.ComponentType, colorClass: string, bgClass: string }}
+ * @returns {{ Icon: React.ComponentType, colorClass: string, bgClass: string, label: string }}
  */
 function severityStyle(severity: string) {
   switch (severity) {
@@ -47,6 +52,7 @@ function severityStyle(severity: string) {
         Icon: AlertCircle,
         colorClass: "text-error",
         bgClass: "bg-error/10 text-error hover:bg-error/10",
+        borderClass: "border-error/20",
         label: "Critical",
       }
     case "WARNING":
@@ -54,6 +60,7 @@ function severityStyle(severity: string) {
         Icon: AlertTriangle,
         colorClass: "text-warning",
         bgClass: "bg-warning/10 text-warning hover:bg-warning/10",
+        borderClass: "border-warning/20",
         label: "Warning",
       }
     default:
@@ -61,6 +68,7 @@ function severityStyle(severity: string) {
         Icon: Info,
         colorClass: "text-info",
         bgClass: "bg-info/10 text-info hover:bg-info/10",
+        borderClass: "border-info/20",
         label: "Info",
       }
   }
@@ -81,6 +89,89 @@ function groupByFile(findings: SemgrepFinding[]) {
   })
 
   return groups
+}
+
+/**
+ * Renders a snippet with line numbers from the finding context
+ * @param {{ snippet: string, startLine: number }} props
+ */
+function SnippetBlock({ snippet, startLine }: { snippet: string; startLine: number }) {
+  const [copied, setCopied] = useState(false)
+  const lines = snippet.split("\n")
+
+  return (
+    <div className="group relative rounded-lg border border-border/30 bg-surface-tertiary overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border/20 bg-surface-secondary/40 px-3 py-1">
+        <span className="text-[9px] text-muted-foreground/60">
+          Lines {startLine}–{startLine + lines.length - 1}
+        </span>
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/50 hover:text-foreground transition-colors"
+          onClick={() => {
+            navigator.clipboard.writeText(snippet)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }}
+        >
+          {copied ? <Check className="h-2.5 w-2.5 text-success" /> : <Copy className="h-2.5 w-2.5" />}
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full font-mono text-[10px] leading-[1.65]">
+          <tbody>
+            {lines.map((line, i) => (
+              <tr key={i} className="hover:bg-background/30">
+                <td className="w-[1px] whitespace-nowrap border-r border-border/20 px-2.5 py-0 text-right text-muted-foreground/40 select-none">
+                  {startLine + i}
+                </td>
+                <td className="px-3 py-0 whitespace-pre text-foreground/85">
+                  {line || " "}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Renders an AI explanation with markdown support
+ * @param {{ content: string }} props
+ */
+function ExplanationBlock({ content }: { content: string }) {
+  return (
+    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Sparkles className="h-3 w-3 text-primary" />
+        <span className="text-[10px] font-medium text-primary">AI Explanation</span>
+      </div>
+      <div className="text-[11px] leading-relaxed text-foreground/85">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+            code: ({ children }) => (
+              <code className="rounded bg-surface-tertiary px-1 py-0.5 text-[10px] font-mono text-primary/90">{children}</code>
+            ),
+            ul: ({ children }) => <ul className="mb-1.5 ml-3 list-disc space-y-0.5 last:mb-0">{children}</ul>,
+            ol: ({ children }) => <ol className="mb-1.5 ml-3 list-decimal space-y-0.5 last:mb-0">{children}</ol>,
+            li: ({ children }) => <li>{children}</li>,
+            a: ({ href, children }) => (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+                {children}
+              </a>
+            ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -139,7 +230,7 @@ export function ScanFindingsPanel({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-14rem)]">
+    <ScrollArea className="h-full">
       <div className="space-y-2 pr-3">
         {Array.from(grouped.entries()).map(([filePath, items]) => {
           const isFileExpanded = expandedFiles.has(filePath)
@@ -159,11 +250,11 @@ export function ScanFindingsPanel({
               <button
                 type="button"
                 onClick={() => toggleFile(filePath)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
               >
                 <ChevronDown
                   className={cn(
-                    "icon-xs shrink-0 text-muted-foreground transition-transform",
+                    "icon-xs shrink-0 text-muted-foreground transition-transform duration-200",
                     !isFileExpanded && "-rotate-90"
                   )}
                 />
@@ -189,9 +280,9 @@ export function ScanFindingsPanel({
               </button>
 
               {isFileExpanded && (
-                <div className="border-t border-border/30 px-3 py-1.5 space-y-1.5">
+                <div className="border-t border-border/30 px-3 py-2 space-y-2">
                   {items.map(({ finding, index }) => {
-                    const { Icon, bgClass, label } = severityStyle(finding.severity)
+                    const { Icon, bgClass, borderClass, label } = severityStyle(finding.severity)
                     const isFindingExpanded = expandedFindings.has(index)
                     const explanation = explanations[String(index)]
                     const isExplaining = loadingExplanation === index
@@ -199,38 +290,41 @@ export function ScanFindingsPanel({
                     return (
                       <div
                         key={index}
-                        className="rounded-lg border border-border/30 bg-background/60"
+                        className={cn(
+                          "rounded-lg border bg-background/60 transition-colors",
+                          isFindingExpanded ? borderClass : "border-border/30"
+                        )}
                       >
                         <button
                           type="button"
                           onClick={() => toggleFinding(index)}
-                          className="flex w-full items-start gap-2 px-2.5 py-2 text-left"
+                          className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
                         >
                           <Icon className={cn("icon-xs shrink-0 mt-0.5", severityStyle(finding.severity).colorClass)} />
                           <div className="min-w-0 flex-1">
                             <p className="text-xs text-foreground leading-snug">
                               {finding.message}
                             </p>
-                            <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                              <Badge className={cn(bgClass, "text-[9px] px-1 py-0")}>{label}</Badge>
-                              <span>L{finding.startLine}–{finding.endLine}</span>
-                              <span className="truncate">{finding.ruleId}</span>
+                            <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                              <Badge className={cn(bgClass, "text-[9px] px-1.5 py-0")}>{label}</Badge>
+                              <span className="font-mono text-foreground/50">
+                                L{finding.startLine}–{finding.endLine}
+                              </span>
+                              <span className="truncate text-muted-foreground/60">{finding.ruleId}</span>
                             </div>
                           </div>
                           <ChevronDown
                             className={cn(
-                              "icon-xs shrink-0 text-muted-foreground transition-transform mt-0.5",
+                              "icon-xs shrink-0 text-muted-foreground transition-transform duration-200 mt-0.5",
                               !isFindingExpanded && "-rotate-90"
                             )}
                           />
                         </button>
 
                         {isFindingExpanded && (
-                          <div className="border-t border-border/20 px-2.5 py-2 space-y-2">
+                          <div className="border-t border-border/20 px-3 py-2.5 space-y-2.5">
                             {finding.snippet && (
-                              <pre className="overflow-x-auto rounded-lg bg-surface-tertiary p-2 text-[11px] leading-relaxed text-foreground/90 font-mono">
-                                {finding.snippet}
-                              </pre>
+                              <SnippetBlock snippet={finding.snippet} startLine={finding.startLine} />
                             )}
 
                             <div className="flex items-center gap-2">
@@ -243,14 +337,17 @@ export function ScanFindingsPanel({
                                   onFileClick(finding.filePath)
                                 }}
                               >
-                                <FileCode className="h-3 w-3" />
+                                <ExternalLink className="h-3 w-3" />
                                 View file
                               </Button>
 
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-xs gap-1.5 rounded-lg"
+                                className={cn(
+                                  "h-7 text-xs gap-1.5 rounded-lg",
+                                  explanation && "border-primary/20 text-primary"
+                                )}
                                 disabled={isExplaining || !!explanation}
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -262,17 +359,11 @@ export function ScanFindingsPanel({
                                 ) : (
                                   <Sparkles className="h-3 w-3" />
                                 )}
-                                {explanation ? "Explained" : "Explain"}
+                                {explanation ? "Explained" : "Explain with AI"}
                               </Button>
                             </div>
 
-                            {explanation && (
-                              <div className="rounded-lg border border-primary/15 bg-primary/5 p-2.5">
-                                <p className="text-[11px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
-                                  {explanation}
-                                </p>
-                              </div>
-                            )}
+                            {explanation && <ExplanationBlock content={explanation} />}
                           </div>
                         )}
                       </div>

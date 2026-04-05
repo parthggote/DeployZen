@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   CheckCircle,
   FileCode,
+  Folder,
   FolderSearch,
   GitBranch,
   Github,
@@ -14,6 +15,7 @@ import {
   Play,
   RefreshCw,
   Shield,
+  Sparkles,
   X,
   XCircle,
 } from "lucide-react"
@@ -22,6 +24,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
@@ -652,6 +659,25 @@ export default function RepoScanPage() {
   )
 }
 
+/* ── Spinner verbs (inspired by Claude Code) ── */
+
+const SCAN_VERBS = [
+  "Analyzing", "Auditing", "Inspecting", "Probing", "Scrutinizing",
+  "Dissecting", "Investigating", "Evaluating", "Examining", "Fortifying",
+  "Parsing", "Traversing", "Deciphering", "Processing", "Orchestrating",
+  "Synthesizing", "Correlating", "Validating", "Enumerating", "Cataloging",
+  "Percolating", "Cogitating", "Calibrating", "Computing", "Crystallizing",
+]
+
+/**
+ * Returns a random verb from the scan verbs list
+ * @param {number} seed - Numeric seed for deterministic selection
+ * @returns {string} A random verb
+ */
+function getVerb(seed: number): string {
+  return SCAN_VERBS[seed % SCAN_VERBS.length]
+}
+
 /* ── Progress View (initial stages before findings arrive) ── */
 
 interface ScanProgressViewProps {
@@ -661,8 +687,15 @@ interface ScanProgressViewProps {
   onCancel: () => void
 }
 
+interface LogEntry {
+  id: string
+  text: string
+  status: "done" | "active" | "error"
+  timestamp: number
+}
+
 /**
- * Full-page progress view showing live scan stages before any findings arrive
+ * Full-page progress view with Claude-style shimmer verbs and accumulating log
  * @param {ScanProgressViewProps} props - Component props
  */
 function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressViewProps) {
@@ -670,118 +703,184 @@ function ScanProgressView({ repoName, progress, error, onCancel }: ScanProgressV
   const percent = progress?.percent || 2
   const isFailed = stage === "Failed" || !!error
 
-  const stages = [
-    { key: "queued", label: "Queued — waiting for worker" },
-    { key: "connecting", label: "Connecting to worker" },
-    { key: "cloning", label: "Cloning repository" },
-    { key: "scanning", label: "Running security scan" },
-  ]
+  const [verbIdx, setVerbIdx] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef(Date.now())
+  const logRef = useRef<LogEntry[]>([])
+  const lastStageRef = useRef("")
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const stageMap: Record<string, number> = {}
-  if (stage === "Queued") stageMap.idx = 0
-  else if (stage.startsWith("Connecting")) stageMap.idx = 1
-  else if (stage.startsWith("Cloning") || stage.startsWith("Analyzing")) stageMap.idx = 2
-  else if (stage.startsWith("Scanning:") || stage.startsWith("Scanned")) stageMap.idx = 3
-  else stageMap.idx = -1
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [])
 
-  const currentIdx = stageMap.idx
-  const isScanning = currentIdx === 3
+  useEffect(() => {
+    const verbTimer = setInterval(() => setVerbIdx((v) => v + 1), 3000)
+    return () => clearInterval(verbTimer)
+  }, [])
+
+  if (stage !== lastStageRef.current) {
+    if (lastStageRef.current && logRef.current.length > 0) {
+      const last = logRef.current[logRef.current.length - 1]
+      if (last.status === "active") last.status = "done"
+    }
+
+    if (stage && stage !== "Failed") {
+      logRef.current.push({
+        id: `${stage}-${Date.now()}`,
+        text: stage,
+        status: isFailed ? "error" : "active",
+        timestamp: Date.now() - startRef.current,
+      })
+    }
+    lastStageRef.current = stage
+  }
+
+  if (isFailed && logRef.current.length > 0) {
+    const last = logRef.current[logRef.current.length - 1]
+    if (last.status === "active") last.status = "error"
+  }
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [stage])
+
+  /**
+   * Formats seconds into a compact duration string
+   * @param {number} s - Seconds elapsed
+   * @returns {string} Formatted duration
+   */
+  const fmtTime = (ms: number) => {
+    const s = Math.floor(ms / 1000)
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+  }
+
+  const verb = getVerb(verbIdx)
 
   return (
-    <div className="flex items-center justify-center py-16">
-      <Card className="w-full max-w-lg rounded-2xl border-border/60">
-        <CardContent className="p-8">
-          <div className="text-center space-y-6">
-            <div className="flex justify-center">
-              {isFailed ? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-error/10">
-                  <XCircle className="h-8 w-8 text-error" />
-                </div>
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                  <Shield className="h-8 w-8 text-primary animate-pulse" />
-                </div>
-              )}
-            </div>
+    <div className="mx-auto w-full max-w-2xl py-8">
+      <div className="overflow-hidden rounded-2xl border border-border/50 bg-surface-secondary/30">
+        {/* Top progress strip */}
+        {!isFailed && (
+          <div className="relative h-1 w-full bg-border/20 overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 bg-primary transition-all duration-700 ease-out"
+              style={{ width: `${percent}%` }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/30 to-transparent animate-[shimmer_2s_infinite]" />
+          </div>
+        )}
+        {isFailed && <div className="h-1 w-full bg-error" />}
 
+        {/* Header row */}
+        <div className="flex items-center justify-between border-b border-border/30 px-5 py-3">
+          <div className="flex items-center gap-3">
+            {isFailed ? (
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-error/10">
+                <XCircle className="h-4 w-4 text-error" />
+              </div>
+            ) : (
+              <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+                <Shield className="h-4 w-4 text-primary" />
+                <div className="absolute inset-0 rounded-xl border border-primary/20 animate-ping opacity-20" />
+              </div>
+            )}
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                {isFailed ? "Scan Failed" : "Scanning Repository"}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">{repoName}</p>
-            </div>
-
-            {!isFailed && (
-              <div className="space-y-2">
-                <Progress value={percent} className="h-2" />
-                <p className="text-xs text-muted-foreground">{percent}%</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {isFailed ? (
-                <div className="rounded-xl border border-error/30 bg-error/5 px-4 py-3">
-                  <p className="text-sm text-error">{error || "An error occurred during scanning"}</p>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {stages.map((s, i) => {
-                    const isActive = i === currentIdx
-                    const isDone = currentIdx >= 0 && i < currentIdx
-                    const isPending = !isDone && !isActive
-
-                    return (
-                      <div
-                        key={s.key}
-                        className={cn(
-                          "flex items-center gap-2.5 rounded-lg px-3 py-1.5 transition-all",
-                          isActive && "bg-primary/5"
-                        )}
-                      >
-                        {isDone ? (
-                          <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success" />
-                        ) : isActive ? (
-                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-                        ) : (
-                          <div className="h-3.5 w-3.5 shrink-0 rounded-full border border-border/60" />
-                        )}
-                        <span
-                          className={cn(
-                            "text-xs",
-                            isDone && "text-muted-foreground line-through",
-                            isActive && "text-foreground font-medium",
-                            isPending && "text-muted-foreground/50"
-                          )}
-                        >
-                          {s.label}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+              <p className="text-sm font-medium text-foreground">
+                {isFailed ? "Scan Failed" : repoName}
+              </p>
+              {!isFailed && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Security scan · {elapsed}s elapsed
+                </p>
               )}
             </div>
+          </div>
 
-            {isScanning && stage.startsWith("Scanning:") && (
-              <div className="rounded-xl bg-surface-secondary px-3 py-2">
-                <p className="text-xs text-muted-foreground">
-                  <FolderSearch className="inline h-3 w-3 mr-1" />
-                  {stage}
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            {!isFailed && (
+              <span className="text-xs tabular-nums font-medium text-foreground/50">
+                {percent}%
+              </span>
             )}
-
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="rounded-xl"
+              className="h-7 rounded-lg text-xs text-muted-foreground hover:text-foreground"
               onClick={onCancel}
             >
               {isFailed ? "Back" : "Cancel"}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Verb shimmer row */}
+        {!isFailed && (
+          <div className="flex items-center gap-3 border-b border-border/20 px-5 py-3">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+            <span
+              key={verb}
+              className="text-sm font-medium text-primary animate-in fade-in slide-in-from-bottom-1 duration-500 scan-shimmer-text"
+            >
+              {verb}...
+            </span>
+          </div>
+        )}
+
+        {/* Log area */}
+        <div ref={scrollRef} className="max-h-[280px] overflow-y-auto">
+          <div className="px-5 py-3 space-y-0.5 font-mono text-xs">
+            {logRef.current.map((entry) => (
+              <div
+                key={entry.id}
+                className={cn(
+                  "flex items-start gap-2.5 py-1 animate-in fade-in slide-in-from-bottom-1 duration-300",
+                  entry.status === "error" && "text-error"
+                )}
+              >
+                {entry.status === "done" ? (
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-px text-success" />
+                ) : entry.status === "error" ? (
+                  <XCircle className="h-3.5 w-3.5 shrink-0 mt-px text-error" />
+                ) : (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 mt-px animate-spin text-primary" />
+                )}
+                <span className={cn(
+                  "flex-1",
+                  entry.status === "done" && "text-muted-foreground",
+                  entry.status === "active" && "text-foreground",
+                  entry.status === "error" && "text-error"
+                )}>
+                  {entry.text}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground/40">
+                  {fmtTime(entry.timestamp)}
+                </span>
+              </div>
+            ))}
+
+            {/* Blinking cursor at end */}
+            {!isFailed && (
+              <div className="flex items-center gap-2.5 py-1">
+                <span className="h-3.5 w-3.5 shrink-0" />
+                <span className="inline-block h-4 w-[2px] bg-primary animate-pulse" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Error detail */}
+        {isFailed && error && (
+          <div className="border-t border-error/20 bg-error/5 px-5 py-3">
+            <p className="text-xs text-error">{error}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -942,12 +1041,12 @@ function ScanResultsView({
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-xl"
+            className="h-8 w-8 rounded-xl mt-0.5"
             onClick={onBack}
           >
             <ArrowLeft className="icon-sm" />
@@ -967,125 +1066,179 @@ function ScanResultsView({
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Commit {scan.commitSha.slice(0, 7)} · {scanning
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Commit <code className="rounded bg-surface-tertiary px-1 py-0.5 font-mono text-[10px] text-foreground/70">{scan.commitSha.slice(0, 7)}</code>
+              {" · "}
+              {scanning
                 ? "Scan in progress..."
                 : scan.completedAt
-                  ? `Scanned ${new Date(scan.completedAt).toLocaleDateString()}`
+                  ? `Scanned ${new Date(scan.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
                   : "Scan in progress"}
             </p>
           </div>
         </div>
 
         {scan.summary && (
-          <div className="flex items-center gap-3 rounded-full border border-border/60 bg-background/80 px-4 py-1.5">
+          <div className="flex items-center gap-px rounded-xl border border-border/50 bg-surface-secondary/50 overflow-hidden">
             {scan.summary.critical > 0 && (
-              <span className="flex items-center gap-1 text-xs">
-                <span className="h-2 w-2 rounded-full bg-error" />
-                <span className="font-medium text-error">{scan.summary.critical}</span>
-                <span className="text-muted-foreground">critical</span>
-              </span>
+              <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
+                <span className="h-2 w-2 rounded-full bg-error shadow-[0_0_6px] shadow-error/40" />
+                <span className="text-sm font-semibold tabular-nums text-error">{scan.summary.critical}</span>
+                <span className="text-[10px] text-muted-foreground">critical</span>
+              </div>
             )}
             {scan.summary.warning > 0 && (
-              <span className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
                 <span className="h-2 w-2 rounded-full bg-warning" />
-                <span className="font-medium text-warning">{scan.summary.warning}</span>
-                <span className="text-muted-foreground">warnings</span>
-              </span>
+                <span className="text-sm font-semibold tabular-nums text-warning">{scan.summary.warning}</span>
+                <span className="text-[10px] text-muted-foreground">warnings</span>
+              </div>
             )}
-            <span className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
               <span className="h-2 w-2 rounded-full bg-info" />
-              <span className="font-medium text-info">{scan.summary.info}</span>
-              <span className="text-muted-foreground">info</span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              · {scan.summary.filesScanned} files
-            </span>
+              <span className="text-sm font-semibold tabular-nums text-info">{scan.summary.info}</span>
+              <span className="text-[10px] text-muted-foreground">info</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3.5 py-2">
+              <span className="text-sm font-semibold tabular-nums text-foreground/60">{scan.summary.filesScanned}</span>
+              <span className="text-[10px] text-muted-foreground">files</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* File content overlay */}
+      {/* File content viewer */}
       {selectedFile && fileContent !== null && (
-        <Card className="rounded-2xl border-border/60">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCode className="icon-sm text-muted-foreground" />
-                <span className="text-xs font-medium text-foreground truncate">
-                  {selectedFile}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 rounded-lg"
-                onClick={onCloseFile}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
+        <Card className="rounded-2xl border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/50 px-4 py-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileCode className="icon-sm text-primary shrink-0" />
+              <span className="text-xs font-medium text-foreground truncate">
+                {selectedFile}
+              </span>
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                {selectedFile.split(".").pop()?.toUpperCase()}
+              </Badge>
+              {(() => {
+                const fileFindings = scan.findings.filter((f) => f.filePath === selectedFile)
+                return fileFindings.length > 0 ? (
+                  <Badge className="bg-error/10 text-error hover:bg-error/10 text-[9px] px-1.5 py-0 shrink-0">
+                    {fileFindings.length} {fileFindings.length === 1 ? "issue" : "issues"}
+                  </Badge>
+                ) : null
+              })()}
             </div>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <ScrollArea className="h-[18rem]">
-              {loadingFile ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="icon-md animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <pre className="overflow-x-auto rounded-xl bg-surface-tertiary p-3 text-[11px] leading-relaxed text-foreground/90 font-mono">
-                  {fileContent}
-                </pre>
-              )}
-            </ScrollArea>
-          </CardContent>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-lg shrink-0 hover:bg-error/10 hover:text-error"
+              onClick={onCloseFile}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <ScrollArea className="h-[22rem]">
+            {loadingFile ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="icon-md animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="relative">
+                <table className="w-full border-collapse font-mono text-[11px] leading-[1.6]">
+                  <tbody>
+                    {fileContent.split("\n").map((line, i) => {
+                      const lineNum = i + 1
+                      const hasIssue = scan.findings.some(
+                        (f) => f.filePath === selectedFile && lineNum >= f.startLine && lineNum <= f.endLine
+                      )
+                      return (
+                        <tr
+                          key={i}
+                          className={cn(
+                            "group",
+                            hasIssue && "bg-error/[0.06]"
+                          )}
+                        >
+                          <td className="sticky left-0 w-[1px] whitespace-nowrap border-r border-border/30 bg-surface-secondary/80 px-3 py-0 text-right text-[10px] text-muted-foreground/50 select-none">
+                            {lineNum}
+                          </td>
+                          {hasIssue && (
+                            <td className="w-[1px] px-1 py-0">
+                              <AlertTriangle className="h-3 w-3 text-error" />
+                            </td>
+                          )}
+                          <td className={cn("px-4 py-0 whitespace-pre text-foreground/90", !hasIssue && "pl-6")}>
+                            {line || " "}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </ScrollArea>
         </Card>
       )}
 
-      {/* Three-column layout */}
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr_300px]">
+      {/* Three-column resizable layout */}
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="h-[calc(100vh-14rem)] rounded-2xl border border-border/50 overflow-hidden"
+      >
         {/* File Explorer */}
-        <Card className="rounded-2xl border-border/60 overflow-hidden">
-          <div className="border-b border-border/40 px-3 py-2">
-            <p className="text-xs font-medium text-foreground">Files</p>
-            <p className="text-[10px] text-muted-foreground">
-              {scan.fileTree.filter((f) => f.type === "file").length} files
-              {scanning && scannedDirSet.size > 0 && (
-                <span className="ml-1 text-primary">
-                  · {scannedDirSet.size} dirs scanned
+        <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>
+          <div className="flex h-full flex-col bg-surface-secondary/20">
+            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <Folder className="icon-xs text-primary/70" />
+                <p className="text-xs font-medium text-foreground">Files</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] tabular-nums font-medium text-foreground/60">
+                  {scan.fileTree.filter((f) => f.type === "file").length}
                 </span>
-              )}
-            </p>
+                {scanning && scannedDirSet.size > 0 && (
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-[9px] px-1.5 py-0 gap-0.5">
+                    <Loader2 className="h-2 w-2 animate-spin" />
+                    {scannedDirSet.size} dirs
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto px-1 py-1">
+              <RepoFileExplorer
+                fileTree={scan.fileTree}
+                selectedFile={selectedFile}
+                loadingFile={loadingFile}
+                onFileSelect={onFileSelect}
+              />
+            </div>
           </div>
-          <div className="px-1 py-1">
-            <RepoFileExplorer
-              fileTree={scan.fileTree}
-              selectedFile={selectedFile}
-              loadingFile={loadingFile}
-              onFileSelect={onFileSelect}
-            />
-          </div>
-        </Card>
+        </ResizablePanel>
+
+        <ResizableHandle className="bg-border/30 hover:bg-primary/20 data-[resize-handle-active]:bg-primary/30 transition-colors w-[3px]" />
 
         {/* Findings Panel */}
-        <Card className="rounded-2xl border-border/60 overflow-hidden">
-          <div className="border-b border-border/40 px-3 py-2">
-            <div className="flex items-center justify-between">
-              <div>
+        <ResizablePanel defaultSize={50} minSize={25}>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="icon-xs text-warning" />
                 <p className="text-xs font-medium text-foreground">
                   Findings
                   {scanning && (
-                    <span className="ml-1.5 text-primary font-normal">(live)</span>
+                    <span className="ml-1 text-primary font-normal">(live)</span>
                   )}
                 </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {scan.findings.length} issues found
-                  {scanning && newFindingCount > 0 && (
-                    <span className="ml-1 text-primary animate-in fade-in duration-300">
-                      · +{newFindingCount} new
-                    </span>
-                  )}
-                </p>
+                <Badge variant="secondary" className="text-[9px] px-1.5 py-0 tabular-nums">
+                  {scan.findings.length}
+                </Badge>
+                {scanning && newFindingCount > 0 && (
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-[9px] px-1.5 py-0 animate-in fade-in duration-300">
+                    +{newFindingCount}
+                  </Badge>
+                )}
               </div>
               {scan.summary && scan.summary.total > 0 && (
                 <div className="flex items-center gap-1">
@@ -1101,35 +1254,42 @@ function ScanResultsView({
                 </div>
               )}
             </div>
+            <div className="flex-1 overflow-auto px-2 py-1">
+              <ScanFindingsPanel
+                findings={scan.findings}
+                explanations={explanations}
+                loadingExplanation={loadingExplanation}
+                selectedFile={selectedFile}
+                onExplain={onExplain}
+                onFileClick={onFileSelect}
+              />
+            </div>
           </div>
-          <div className="px-2 py-1">
-            <ScanFindingsPanel
-              findings={scan.findings}
-              explanations={explanations}
-              loadingExplanation={loadingExplanation}
-              selectedFile={selectedFile}
-              onExplain={onExplain}
-              onFileClick={onFileSelect}
-            />
-          </div>
-        </Card>
+        </ResizablePanel>
+
+        <ResizableHandle className="bg-border/30 hover:bg-primary/20 data-[resize-handle-active]:bg-primary/30 transition-colors w-[3px]" />
 
         {/* AI Chat Panel */}
-        <Card className="rounded-2xl border-border/60 overflow-hidden">
-          <div className="border-b border-border/40 px-3 py-2">
-            <p className="text-xs font-medium text-foreground">Security Assistant</p>
-            <p className="text-[10px] text-muted-foreground">
-              {scanning ? "Available once scan completes" : "AI-powered analysis"}
-            </p>
+        <ResizablePanel defaultSize={30} minSize={18} maxSize={45}>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="icon-xs text-primary" />
+                <p className="text-xs font-medium text-foreground">Security Assistant</p>
+              </div>
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                {scanning ? "Waiting..." : "Ready"}
+              </Badge>
+            </div>
+            <ScanChatPanel
+              scanId={scan._id}
+              chatHistory={chatHistory}
+              onNewMessage={onNewChatMessage}
+              selectedFindingIndex={selectedFindingIndex}
+            />
           </div>
-          <ScanChatPanel
-            scanId={scan._id}
-            chatHistory={chatHistory}
-            onNewMessage={onNewChatMessage}
-            selectedFindingIndex={selectedFindingIndex}
-          />
-        </Card>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   )
 }
