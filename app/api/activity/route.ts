@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getHuggingFaceModelInfo, checkHuggingFaceModelStatus } from "@/lib/huggingface"
+import { getHuggingFaceModelInfo, checkHuggingFaceModelStatus, checkInferenceAvailability } from "@/lib/huggingface"
 import logger from "@/lib/logger"
 
 /**
@@ -132,6 +132,14 @@ export async function POST(request: NextRequest) {
 
     const resolvedTask = task || modelInfo.pipeline_tag || "text-generation"
 
+    const availability = await checkInferenceAvailability(huggingFaceModelId, user.hfAccessToken)
+    if (!availability.available) {
+      return NextResponse.json({
+        success: false,
+        error: `This model has no inference provider available on Hugging Face. ${availability.reason || "Only models with active inference providers can be registered."}`,
+      }, { status: 422 })
+    }
+
     const modelId = new ObjectId()
     const modelDoc = {
       _id: modelId,
@@ -140,6 +148,8 @@ export async function POST(request: NextRequest) {
       huggingFaceModelId,
       task: resolvedTask,
       status: "Pending" as const,
+      inferenceProvider: availability.provider,
+      inferenceProviderId: availability.providerId,
       config: { maxTokens: 256, temperature: 0.7, topP: 0.9 },
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
@@ -147,10 +157,18 @@ export async function POST(request: NextRequest) {
     }
 
     await db.collection("models").insertOne(modelDoc)
-    await logActivity(`Model registered: "${modelName}" (${huggingFaceModelId}, task: ${resolvedTask})`)
+    await logActivity(`Model registered: "${modelName}" (${huggingFaceModelId}, provider: ${availability.provider}, task: ${resolvedTask})`)
 
     const status = await checkHuggingFaceModelStatus(huggingFaceModelId, user.hfAccessToken)
-    const newStatus = status.loaded ? "Running" : "Loading"
+    let newStatus: string
+    if (status.unsupported) {
+      newStatus = "Failed"
+    } else if (status.loaded) {
+      newStatus = "Running"
+    } else {
+      newStatus = "Loading"
+    }
+
     await db.collection("models").updateOne(
       { _id: modelId },
       { $set: { status: newStatus } }
@@ -160,9 +178,10 @@ export async function POST(request: NextRequest) {
       success: true,
       modelId: modelId.toString(),
       status: newStatus,
+      provider: availability.provider,
       message: status.loaded
-        ? "Model is ready for inference"
-        : `Model is loading (est. ${status.estimatedTime || 30}s). It will be ready when first inference is called.`,
+        ? `Model is ready for inference (via ${availability.provider})`
+        : `Model registered (via ${availability.provider}). It will be ready when first inference is called.`,
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"

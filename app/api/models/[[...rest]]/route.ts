@@ -41,23 +41,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ rest
       const hfToken = user?.hfAccessToken
 
       const modelUpdates = models.map(async (model) => {
-        if (model.huggingFaceModelId && hfToken && model.status !== "Running" && model.status !== "Failed") {
-          try {
-            const hfStatus = await checkHuggingFaceModelStatus(model.huggingFaceModelId, hfToken)
-            const newStatus = hfStatus.loaded ? "Running" : "Loading"
-            if (newStatus !== model.status) {
-              await db.collection("models").updateOne(
-                { _id: model._id },
-                { $set: { status: newStatus, lastActivity: new Date().toISOString() } }
-              )
-              return { ...model, status: newStatus }
-            }
-          } catch (error: unknown) {
-            logger.warn("Failed to refresh HF model status", {
-              model: model.modelName,
-              error: error instanceof Error ? error.message : String(error),
-            })
+        if (!model.huggingFaceModelId || !hfToken) return model
+        if (model.status === "Running" || model.status === "Failed") return model
+
+        try {
+          const hfStatus = await checkHuggingFaceModelStatus(model.huggingFaceModelId, hfToken)
+
+          let newStatus: string
+          if (hfStatus.unsupported) {
+            newStatus = "Failed"
+          } else if (hfStatus.loaded) {
+            newStatus = "Running"
+          } else {
+            newStatus = "Loading"
           }
+
+          if (newStatus !== model.status) {
+            const updates: Record<string, unknown> = { status: newStatus, lastActivity: new Date().toISOString() }
+            if (hfStatus.unsupported && hfStatus.reason) {
+              updates.statusError = hfStatus.reason
+            }
+            if (hfStatus.provider) {
+              updates.inferenceProvider = hfStatus.provider
+            }
+            await db.collection("models").updateOne({ _id: model._id }, { $set: updates })
+            return { ...model, ...updates }
+          }
+        } catch (error: unknown) {
+          logger.warn("Failed to refresh HF model status", {
+            model: model.modelName,
+            error: error instanceof Error ? error.message : String(error),
+          })
         }
         return model
       })

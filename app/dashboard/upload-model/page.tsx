@@ -58,6 +58,8 @@ interface ModelData {
   huggingFaceModelId: string
   task: string
   status: "Pending" | "Running" | "Loading" | "Failed"
+  inferenceProvider?: string
+  statusError?: string
   config: { maxTokens: number; temperature: number; topP: number }
   createdAt: string
   lastActivity?: string
@@ -72,6 +74,7 @@ interface HFSearchResult {
   likes: number
   lastModified: string
   library_name?: string
+  inferenceProviderMapping?: Record<string, unknown>
 }
 
 interface HFUser {
@@ -501,7 +504,14 @@ export default function UploadModelPage() {
                             }`}
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{m.id}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-medium">{m.id}</p>
+                                {m.inferenceProviderMapping && Object.keys(m.inferenceProviderMapping).length > 0 ? (
+                                  <span className="shrink-0 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] font-medium text-success">Inference</span>
+                                ) : (
+                                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">No API</span>
+                                )}
+                              </div>
                               <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
                                 {m.pipeline_tag && <span>{m.pipeline_tag}</span>}
                                 <span>{formatCount(m.downloads)} downloads</span>
@@ -656,20 +666,24 @@ export default function UploadModelPage() {
 
                       {isOpen && (
                         <div className="border-t border-border/60 px-4 pb-4 pt-3">
+                          {model.status === "Failed" && model.statusError && (
+                            <div className="mb-3 rounded-lg border border-error/20 bg-error/5 px-3 py-2">
+                              <p className="text-xs text-error">{model.statusError}</p>
+                            </div>
+                          )}
+
                           <div className="grid gap-3 sm:grid-cols-3">
                             <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
                               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Task</p>
                               <p className="mt-1 text-sm font-semibold">{model.task}</p>
                             </div>
                             <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
-                              <p className="mt-1 text-sm font-semibold">{model.metrics?.totalRequests || 0}</p>
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Provider</p>
+                              <p className="mt-1 text-sm font-semibold">{model.inferenceProvider || "—"}</p>
                             </div>
                             <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg latency</p>
-                              <p className="mt-1 text-sm font-semibold">
-                                {model.metrics?.avgLatencyMs ? `${model.metrics.avgLatencyMs}ms` : "—"}
-                              </p>
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
+                              <p className="mt-1 text-sm font-semibold">{model.metrics?.totalRequests || 0}</p>
                             </div>
                           </div>
 
