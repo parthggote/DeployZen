@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 interface ScanSummary {
@@ -146,10 +145,11 @@ export function ScanHistoryList({
 
   return (
     <>
-      <ScrollArea
-        type="always"
-        scrollHideDelay={0}
-        className={cn("h-[18rem] min-h-0 pr-1 sm:h-[20rem]", viewportClassName)}
+      <div
+        className={cn(
+          "h-[18rem] min-h-0 overflow-y-auto overscroll-contain pr-1 sm:h-[20rem]",
+          viewportClassName
+        )}
       >
         <div className="space-y-1 pr-3">
           {scans.map((scan) => {
@@ -233,7 +233,7 @@ export function ScanHistoryList({
             )
           })}
         </div>
-      </ScrollArea>
+      </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="rounded-2xl max-w-sm">

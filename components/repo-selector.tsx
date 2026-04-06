@@ -11,7 +11,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -102,10 +101,11 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
         />
       </div>
 
-      <ScrollArea
-        type="always"
-        scrollHideDelay={0}
-        className={cn("h-[16rem] min-h-0 flex-1 pr-1 sm:h-[18rem]", listClassName)}
+      <div
+        className={cn(
+          "h-[16rem] min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 sm:h-[18rem]",
+          listClassName
+        )}
       >
         {loading ? (
           <div className="flex items-center justify-center py-8">
@@ -169,7 +169,7 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   )
 }
