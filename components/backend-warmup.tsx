@@ -2,23 +2,32 @@
 
 import { useEffect, useRef } from "react"
 
-const WARMUP_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
+const WARMUP_INTERVAL_MS = 10 * 60 * 1000
 
 /**
- * Invisible client component that fires a lightweight request to the
- * worker wake endpoint on mount and periodically thereafter. This keeps
- * the Render free-tier semgrep-worker from sleeping while the user has
- * the dashboard open.
+ * Invisible client component that pings the worker wake endpoint
+ * on mount and periodically while the tab is visible, keeping the
+ * Render free-tier semgrep-worker from sleeping.
  */
 export function BackendWarmup() {
   const pingedRef = useRef(false)
 
   useEffect(() => {
-    /**
-     * Sends a fire-and-forget ping to the worker wake endpoint
-     */
-    const ping = () => {
-      fetch("/api/worker/wake").catch(() => {})
+    const ping = () => { fetch("/api/worker/wake").catch(() => {}) }
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (interval) return
+      interval = setInterval(ping, WARMUP_INTERVAL_MS)
+    }
+    const stop = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+    const onVis = () => {
+      if (document.hidden) stop()
+      else start()
     }
 
     if (!pingedRef.current) {
@@ -26,8 +35,9 @@ export function BackendWarmup() {
       ping()
     }
 
-    const interval = setInterval(ping, WARMUP_INTERVAL_MS)
-    return () => clearInterval(interval)
+    start()
+    document.addEventListener("visibilitychange", onVis)
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis) }
   }, [])
 
   return null

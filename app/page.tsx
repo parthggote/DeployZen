@@ -14,7 +14,7 @@ export default function Page() {
         <div className="mb-10 flex justify-center animate-scale-in">
           <div className="relative">
             <img
-              src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png"
+              src="/deployzen-icon.png"
               alt="DeployZen Logo"
               className="w-20 h-20 drop-shadow-lg rounded-xl"
             />
