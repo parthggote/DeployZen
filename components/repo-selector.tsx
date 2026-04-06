@@ -102,7 +102,11 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
         />
       </div>
 
-      <ScrollArea className={cn("h-[16rem] sm:h-[18rem] min-h-0 flex-1", listClassName)}>
+      <ScrollArea
+        type="always"
+        scrollHideDelay={0}
+        className={cn("h-[16rem] min-h-0 flex-1 pr-1 sm:h-[18rem]", listClassName)}
+      >
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="icon-md animate-spin text-muted-foreground" />
