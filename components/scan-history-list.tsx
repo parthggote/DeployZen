@@ -147,7 +147,7 @@ export function ScanHistoryList({
     <>
       <div
         className={cn(
-          "h-[18rem] min-h-0 overflow-y-auto overscroll-contain pr-1 sm:h-[20rem]",
+          "h-[18rem] min-h-0 overflow-y-scroll overscroll-contain pr-1 [scrollbar-gutter:stable] sm:h-[20rem]",
           viewportClassName
         )}
       >
