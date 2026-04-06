@@ -146,7 +146,11 @@ export function ScanHistoryList({
 
   return (
     <>
-      <ScrollArea className={cn("h-[18rem] sm:h-[20rem] min-h-0", viewportClassName)}>
+      <ScrollArea
+        type="always"
+        scrollHideDelay={0}
+        className={cn("h-[18rem] min-h-0 pr-1 sm:h-[20rem]", viewportClassName)}
+      >
         <div className="space-y-1 pr-3">
           {scans.map((scan) => {
             const { Icon, color, spin } = statusMeta(scan.status) as { Icon: React.ComponentType<{ className?: string }>; color: string; spin?: boolean }
