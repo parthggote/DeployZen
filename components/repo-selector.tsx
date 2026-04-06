@@ -31,13 +31,14 @@ interface Repo {
 interface RepoSelectorProps {
   onSelect: (repo: Repo) => void
   selectedRepo: Repo | null
+  listClassName?: string
 }
 
 /**
  * Searchable dropdown for selecting a GitHub repository from the user's account
  * @param {RepoSelectorProps} props - Component props
  */
-export function RepoSelector({ onSelect, selectedRepo }: RepoSelectorProps) {
+export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSelectorProps) {
   const [repos, setRepos] = useState<Repo[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
@@ -101,7 +102,7 @@ export function RepoSelector({ onSelect, selectedRepo }: RepoSelectorProps) {
         />
       </div>
 
-      <ScrollArea className="h-[16rem]">
+      <ScrollArea className={cn("h-[16rem] sm:h-[18rem]", listClassName)}>
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="icon-md animate-spin text-muted-foreground" />

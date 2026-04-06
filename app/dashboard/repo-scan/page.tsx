@@ -582,9 +582,9 @@ export default function RepoScanPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,25rem)] lg:items-start">
         {/* Repo selector + Scan trigger */}
-        <Card className="rounded-2xl border-border/60 animate-slide-up-fade stagger-2">
+        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-2 lg:min-h-[calc(100svh-13rem)]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
@@ -593,16 +593,19 @@ export default function RepoScanPage() {
               Select Repository
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-1 min-h-0 flex-col">
             {githubConnected ? (
-              <div className="space-y-4">
-                <RepoSelector
-                  onSelect={setSelectedRepo}
-                  selectedRepo={selectedRepo}
-                />
+              <div className="flex h-full min-h-0 flex-col gap-4">
+                <div className="min-h-0 flex-1">
+                  <RepoSelector
+                    onSelect={setSelectedRepo}
+                    selectedRepo={selectedRepo}
+                    listClassName="h-[18rem] lg:h-full"
+                  />
+                </div>
 
                 {selectedRepo && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 border-t border-border/40 pt-4">
                     <Button
                       className="flex-1 gap-2 rounded-xl active:scale-[0.97] transition-transform"
                       onClick={startScan}
@@ -647,7 +650,7 @@ export default function RepoScanPage() {
         </Card>
 
         {/* Scan history */}
-        <Card className="rounded-2xl border-border/60 animate-slide-up-fade stagger-4">
+        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-4 lg:sticky lg:top-6 lg:max-h-[calc(100svh-13rem)]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-secondary">
@@ -656,13 +659,14 @@ export default function RepoScanPage() {
               Scan History
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 min-h-0">
             <ScanHistoryList
               scans={scans}
               loading={scansLoading}
               selectedId={selectedScanId}
               onSelect={(id) => loadFullScan(id)}
               onDelete={deleteScan}
+              viewportClassName="h-[18rem] lg:h-full"
             />
           </CardContent>
         </Card>
