@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
         branch: scan.branch,
         accessToken: user.githubAccessToken,
         callbackUrl,
+        ...(scan.resumeFrom ? { resumeFrom: scan.resumeFrom } : {}),
       },
     })
   } catch (error: unknown) {

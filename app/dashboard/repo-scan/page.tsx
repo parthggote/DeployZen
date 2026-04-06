@@ -263,11 +263,13 @@ export default function RepoScanPage() {
   }, [closeStream])
 
   /**
-   * Starts a scan for the selected repository.
-   * Wakes the semgrep worker first so it is ready to pick up the job.
+   * Starts a scan for a repository. Uses an explicit repo arg when provided,
+   * otherwise falls back to the currently selected repo in state.
+   * @param {object} [repoOverride] - Optional repo to scan (used by rescan)
    */
-  async function startScan() {
-    if (!selectedRepo) return
+  async function startScan(repoOverride?: { fullName: string; defaultBranch: string }) {
+    const repo = repoOverride || selectedRepo
+    if (!repo) return
 
     setScanning(true)
     setScanError(null)
@@ -283,8 +285,8 @@ export default function RepoScanPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          repoFullName: selectedRepo.fullName,
-          branch: selectedRepo.defaultBranch,
+          repoFullName: repo.fullName,
+          branch: repo.defaultBranch,
         }),
         retries: 2,
         timeoutMs: 30_000,
@@ -297,8 +299,8 @@ export default function RepoScanPage() {
         setSelectedScanId(data.scanId)
         setFullScan({
           _id: data.scanId,
-          repoFullName: selectedRepo.fullName,
-          branch: selectedRepo.defaultBranch,
+          repoFullName: repo.fullName,
+          branch: repo.defaultBranch,
           commitSha: data.commitSha || "-------",
           status: "running",
           startedAt: new Date().toISOString(),
@@ -324,6 +326,55 @@ export default function RepoScanPage() {
       setScanProgress(null)
       setView("home")
     }
+  }
+
+  /**
+   * Resumes a failed scan from where it left off instead of restarting.
+   * Calls the resume endpoint which re-queues the scan with scannedDirs context,
+   * then opens the SSE stream on the same scan ID.
+   * @param {string} scanId - The ID of the failed scan to resume
+   */
+  async function resumeScan(scanId: string) {
+    setScanning(true)
+    setScanError(null)
+    setScanProgress({ stage: "Resuming scan…", percent: 2, updatedAt: new Date().toISOString() })
+
+    try {
+      const res = await fetchWithRetry(`/api/scans/${scanId}/resume`, {
+        method: "POST",
+        retries: 2,
+        timeoutMs: 15_000,
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        setRunningScanId(scanId)
+        setSelectedScanId(scanId)
+        setView("results")
+        openScanStream(scanId)
+      } else {
+        setScanError(data.error || "Failed to resume scan")
+        setScanning(false)
+        setScanProgress(null)
+      }
+    } catch {
+      setScanError("Failed to resume scan — retrying from scratch")
+      setScanning(false)
+      setScanProgress(null)
+    }
+  }
+
+  /**
+   * Starts a fresh scan for a previously completed repo. Used when the user
+   * has pushed new commits and wants to re-analyse from scratch.
+   * @param {FullScan} scan - Completed scan to re-scan
+   */
+  function rescanRepo(scan: FullScan) {
+    closeStream()
+    setFullScan(null)
+    setRunningScanId(null)
+    startScan({ fullName: scan.repoFullName, defaultBranch: scan.branch })
   }
 
   /**
@@ -515,13 +566,18 @@ export default function RepoScanPage() {
         setFullScan(null)
       }}
       onRetry={() => {
-        closeStream()
-        setScanning(false)
-        setScanProgress(null)
-        setRunningScanId(null)
-        setFullScan(null)
-        startScan()
+        if (fullScan?._id && fullScan.status === "failed") {
+          resumeScan(fullScan._id)
+        } else {
+          closeStream()
+          setScanning(false)
+          setScanProgress(null)
+          setRunningScanId(null)
+          setFullScan(null)
+          startScan()
+        }
       }}
+      onRescan={fullScan ? () => rescanRepo(fullScan) : undefined}
       onFileSelect={fetchFileContent}
       onExplain={explainFinding}
       onNewChatMessage={handleNewChatMessage}
@@ -584,7 +640,7 @@ export default function RepoScanPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,25rem)] lg:items-start">
         {/* Repo selector + Scan trigger */}
-        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-2 lg:min-h-[calc(100svh-13rem)]">
+        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-2 lg:min-h-[calc(100svh-13rem)] lg:max-h-[calc(100svh-13rem)]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
@@ -593,7 +649,7 @@ export default function RepoScanPage() {
               Select Repository
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-1 min-h-0 flex-col">
+          <CardContent className="flex flex-1 min-h-0 flex-col overflow-hidden">
             {githubConnected ? (
               <div className="flex h-full min-h-0 flex-col gap-4">
                 <div className="min-h-0 flex-1">
@@ -608,7 +664,7 @@ export default function RepoScanPage() {
                   <div className="flex items-center gap-2 border-t border-border/40 pt-4">
                     <Button
                       className="flex-1 gap-2 rounded-xl active:scale-[0.97] transition-transform"
-                      onClick={startScan}
+                      onClick={() => startScan()}
                       disabled={scanning}
                     >
                       {scanning ? (
@@ -659,7 +715,7 @@ export default function RepoScanPage() {
               Scan History
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0">
+          <CardContent className="flex-1 min-h-0 overflow-hidden">
             <ScanHistoryList
               scans={scans}
               loading={scansLoading}
@@ -787,6 +843,7 @@ interface ScanResultsViewProps {
   onBack: () => void
   onCancel: () => void
   onRetry: () => void
+  onRescan?: () => void
   onFileSelect: (path: string) => void
   onExplain: (index: number) => void
   onNewChatMessage: (userMsg: ChatMessage, assistantMsg: ChatMessage) => void
@@ -814,6 +871,7 @@ function ScanResultsView({
   onBack,
   onCancel,
   onRetry,
+  onRescan,
   onFileSelect,
   onExplain,
   onNewChatMessage,
@@ -845,21 +903,26 @@ function ScanResultsView({
         </div>
       )}
 
-      {/* Scan failed — retry prompt */}
+      {/* Scan failed — resume prompt */}
       {!scanning && scan.status === "failed" && (
         <div className="shrink-0 flex items-center gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2">
           <AlertTriangle className="icon-xs text-error shrink-0" />
           <p className="flex-1 text-xs text-error">
             {scan.error || "Scan failed unexpectedly."}
+            {(scan.progress?.scannedDirs?.length ?? 0) > 0 && (
+              <span className="ml-1 text-error/70">
+                ({scan.progress!.scannedDirs!.length} dir(s) already scanned — will resume from there)
+              </span>
+            )}
           </p>
           <Button
             size="sm"
             variant="outline"
-            className="h-7 shrink-0 rounded-full border-error/30 px-3 text-xs text-error hover:bg-error/10"
+            className="h-7 shrink-0 rounded-full border-error/30 px-3 text-xs text-error hover:bg-error/10 active:scale-[0.97] transition-transform"
             onClick={onRetry}
           >
-            <RefreshCw className="mr-1.5 h-3 w-3" />
-            Retry scan
+            <Play className="mr-1.5 h-3 w-3" />
+            Resume
           </Button>
         </div>
       )}
@@ -909,15 +972,28 @@ function ScanResultsView({
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Commit <code className="rounded bg-surface-tertiary px-1 py-0.5 font-mono text-[10px] text-foreground/70">{scan.commitSha.slice(0, 7)}</code>
-              {" · "}
-              {scanning
-                ? "Scan in progress..."
-                : scan.completedAt
-                  ? `Scanned ${new Date(scan.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
-                  : "Scan in progress"}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                Commit <code className="rounded bg-surface-tertiary px-1 py-0.5 font-mono text-[10px] text-foreground/70">{scan.commitSha.slice(0, 7)}</code>
+                {" · "}
+                {scanning
+                  ? "Scan in progress..."
+                  : scan.completedAt
+                    ? `Scanned ${new Date(scan.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                    : "Scan in progress"}
+              </p>
+              {!scanning && (scan.status === "completed" || scan.status === "completed_with_errors") && onRescan && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 rounded-full px-2.5 text-[10px] gap-1 active:scale-[0.97] transition-transform"
+                  onClick={onRescan}
+                >
+                  <RefreshCw className="h-2.5 w-2.5" />
+                  Re-scan for updates
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

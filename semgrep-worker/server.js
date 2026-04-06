@@ -418,10 +418,12 @@ app.get("/health", (_req, res) => {
 });
 
 /**
- * Runs the scan pipeline for a single job
+ * Runs the scan pipeline for a single job. When `resumeFrom` is provided the
+ * worker skips directories that were already scanned in a previous attempt,
+ * effectively resuming from where the scan left off.
  * @param {object} job - Scan job claimed from the queue
  */
-async function runScanJob({ repoFullName, accessToken, commitSha, branch, callbackUrl, scanId }) {
+async function runScanJob({ repoFullName, accessToken, commitSha, branch, callbackUrl, scanId, resumeFrom }) {
   const localScanId = scanId || uuidv4();
   const tmpDir = path.join("/tmp", `scan-${localScanId}`);
 
@@ -513,8 +515,21 @@ async function runScanJob({ repoFullName, accessToken, commitSha, branch, callba
     let scannedFileCount = 0;
     let completedBatches = 0;
 
+    const alreadyScanned = new Set(resumeFrom?.scannedDirs || []);
+    if (alreadyScanned.size > 0) {
+      console.log(`[scan:${localScanId}] Resuming — skipping ${alreadyScanned.size} already-scanned dir(s): ${[...alreadyScanned].join(", ")}`);
+    }
+
     for (let targetIndex = 0; targetIndex < scanTargets.length; targetIndex++) {
       const target = scanTargets[targetIndex];
+
+      if (alreadyScanned.has(target.name)) {
+        completedBatches += target.batches.length;
+        scannedDirs.push(target.name);
+        console.log(`[scan:${localScanId}] Skipping already-scanned: ${target.name} (${targetIndex + 1}/${totalTargets})`);
+        continue;
+      }
+
       let targetFindingCount = 0;
 
       console.log(`[scan:${localScanId}] Scanning ${target.name} (${targetIndex + 1}/${totalTargets})...`);
