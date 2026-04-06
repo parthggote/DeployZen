@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 interface KanbanCardProps {
   item: {
@@ -87,7 +88,7 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
         </div>
 
         <div className="space-y-1 min-w-0">
-          <h4 className="text-xs font-semibold leading-snug truncate">{item.title}</h4>
+          <h4 className="text-xs font-semibold leading-snug truncate font-display">{item.title}</h4>
           <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
             {item.description || "No description added yet."}
           </p>
@@ -127,7 +128,7 @@ export function KanbanCard({ item, statusIcon, onEdit, onDelete }: KanbanCardPro
           </div>
 
           {item.type === "model" && modelDetails ? (
-            <Badge className={`rounded-full text-[10px] px-2 py-0 shrink-0 ${getModelStatusTone(modelDetails.status)}`}>
+            <Badge className={cn("rounded-full text-[10px] px-2 py-0 shrink-0", getModelStatusTone(modelDetails.status))}>
               {getModelStatusIcon(modelDetails.status)}
               {modelDetails.status}
             </Badge>

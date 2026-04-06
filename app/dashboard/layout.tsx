@@ -10,7 +10,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-surface-secondary/40 to-background">
+    <div className="noise-overlay min-h-screen bg-gradient-to-br from-background via-surface-secondary/40 to-background">
       <BackendWarmup />
       <TooltipProvider delayDuration={120}>
         <div className="flex min-h-screen">

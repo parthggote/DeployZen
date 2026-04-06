@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: `Model not found on HF Hub: ${huggingFaceModelId}` }, { status: 404 })
     }
 
-    const resolvedTask = task || modelInfo.pipeline_tag || "text-generation"
+    const resolvedTask = modelInfo.pipeline_tag || task || "text-generation"
 
     const availability = await checkInferenceAvailability(huggingFaceModelId, user.hfAccessToken)
     if (!availability.available) {

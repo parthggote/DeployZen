@@ -156,23 +156,25 @@ function TreeItem({
   })
 
   return (
-    <div>
+    <div className="relative">
       <button
         type="button"
         onClick={() => (isDir ? toggleDir(node.path) : onFileSelect(node.path))}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors",
+          "flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-all duration-150",
           isSelected
             ? "bg-primary/10 text-foreground"
-            : "text-foreground/80 hover:bg-background/80"
+            : "text-foreground/80 hover:bg-background/80 hover:translate-x-0.5"
         )}
         style={{ paddingLeft: `${depth * 16 + 6}px` }}
+        aria-expanded={isDir ? isExpanded : undefined}
+        role={isDir ? "treeitem" : undefined}
       >
         {isDir ? (
           <>
             <ChevronRight
               className={cn(
-                "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+                "h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200",
                 isExpanded && "rotate-90"
               )}
             />
@@ -193,7 +195,7 @@ function TreeItem({
           </>
         )}
 
-        <span className="min-w-0 flex-1 truncate text-xs">{node.name}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-mono">{node.name}</span>
 
         {hasFindings && (
           <Badge
@@ -212,7 +214,13 @@ function TreeItem({
       </button>
 
       {isDir && isExpanded && (
-        <div>
+        <div className="relative">
+          {depth > 0 && (
+            <div
+              className="absolute top-0 bottom-2 w-px bg-border/40"
+              style={{ left: `${depth * 16 + 14}px` }}
+            />
+          )}
           {sortedChildren.map((child) => (
             <TreeItem
               key={child.path}

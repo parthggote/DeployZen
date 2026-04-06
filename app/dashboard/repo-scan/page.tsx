@@ -189,12 +189,7 @@ export default function RepoScanPage() {
           setScanProgress(null)
           prevFindingCountRef.current = 0
 
-          if (scan.status === "failed") {
-            setScanError(scan.error || "Scan failed")
-            setView("home")
-          } else {
-            setView("results")
-          }
+          setView("results")
 
           loadScans()
           evtSource.close()
@@ -519,6 +514,14 @@ export default function RepoScanPage() {
         setView("home")
         setFullScan(null)
       }}
+      onRetry={() => {
+        closeStream()
+        setScanning(false)
+        setScanProgress(null)
+        setRunningScanId(null)
+        setFullScan(null)
+        startScan()
+      }}
       onFileSelect={fetchFileContent}
       onExplain={explainFinding}
       onNewChatMessage={handleNewChatMessage}
@@ -529,9 +532,9 @@ export default function RepoScanPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between animate-slide-up-fade">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground font-display">
             Repo Scanner
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -579,9 +582,9 @@ export default function RepoScanPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         {/* Repo selector + Scan trigger */}
-        <Card className="rounded-2xl border-border/60">
+        <Card className="rounded-2xl border-border/60 animate-slide-up-fade stagger-2">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
@@ -601,7 +604,7 @@ export default function RepoScanPage() {
                 {selectedRepo && (
                   <div className="flex items-center gap-2">
                     <Button
-                      className="flex-1 gap-2 rounded-xl"
+                      className="flex-1 gap-2 rounded-xl active:scale-[0.97] transition-transform"
                       onClick={startScan}
                       disabled={scanning}
                     >
@@ -618,7 +621,17 @@ export default function RepoScanPage() {
                 {scanError && (
                   <div className="flex items-center gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2">
                     <AlertTriangle className="icon-xs text-error shrink-0" />
-                    <p className="text-xs text-error">{scanError}</p>
+                    <p className="flex-1 text-xs text-error">{scanError}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 rounded-full border-error/30 px-3 text-xs text-error hover:bg-error/10"
+                      onClick={() => { setScanError(null); startScan() }}
+                      disabled={scanning || !selectedRepo}
+                    >
+                      <RefreshCw className="mr-1.5 h-3 w-3" />
+                      Retry
+                    </Button>
                   </div>
                 )}
               </div>
@@ -634,7 +647,7 @@ export default function RepoScanPage() {
         </Card>
 
         {/* Scan history */}
-        <Card className="rounded-2xl border-border/60">
+        <Card className="rounded-2xl border-border/60 animate-slide-up-fade stagger-4">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-secondary">
@@ -698,7 +711,7 @@ function ScanningBanner({ progress, findingCount, newFindingCount, onCancel }: S
   const verb = SCAN_VERBS[verbIdx % SCAN_VERBS.length]
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-primary/20">
+    <div className="relative overflow-hidden rounded-xl border border-primary/20 glow-primary">
       {/* Shimmer progress bar */}
       <div className="relative h-1 w-full bg-border/20 overflow-hidden">
         <div
@@ -769,6 +782,7 @@ interface ScanResultsViewProps {
   selectedFindingIndex: number | null
   onBack: () => void
   onCancel: () => void
+  onRetry: () => void
   onFileSelect: (path: string) => void
   onExplain: (index: number) => void
   onNewChatMessage: (userMsg: ChatMessage, assistantMsg: ChatMessage) => void
@@ -795,6 +809,7 @@ function ScanResultsView({
   selectedFindingIndex,
   onBack,
   onCancel,
+  onRetry,
   onFileSelect,
   onExplain,
   onNewChatMessage,
@@ -826,13 +841,41 @@ function ScanResultsView({
         </div>
       )}
 
+      {/* Scan failed — retry prompt */}
+      {!scanning && scan.status === "failed" && (
+        <div className="shrink-0 flex items-center gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2">
+          <AlertTriangle className="icon-xs text-error shrink-0" />
+          <p className="flex-1 text-xs text-error">
+            {scan.error || "Scan failed unexpectedly."}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 rounded-full border-error/30 px-3 text-xs text-error hover:bg-error/10"
+            onClick={onRetry}
+          >
+            <RefreshCw className="mr-1.5 h-3 w-3" />
+            Retry scan
+          </Button>
+        </div>
+      )}
+
       {/* Partial-failure warning */}
       {!scanning && scan.status === "completed_with_errors" && (
         <div className="shrink-0 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2">
           <AlertTriangle className="icon-xs text-warning shrink-0" />
-          <p className="text-xs text-warning">
+          <p className="flex-1 text-xs text-warning">
             {scan.error || "Some directories failed to scan. Results may be incomplete."}
           </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 rounded-full border-warning/30 px-3 text-xs text-warning hover:bg-warning/10"
+            onClick={onRetry}
+          >
+            <RefreshCw className="mr-1.5 h-3 w-3" />
+            Rescan
+          </Button>
         </div>
       )}
 
@@ -849,7 +892,7 @@ function ScanResultsView({
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground truncate">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground truncate font-display">
                 {scan.repoFullName}
               </h1>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -878,20 +921,20 @@ function ScanResultsView({
           <div className="flex items-center gap-px rounded-xl border border-border/50 bg-surface-secondary/50 overflow-hidden shrink-0">
             {scan.summary.critical > 0 && (
               <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
-                <span className="h-2 w-2 rounded-full bg-error shadow-[0_0_6px] shadow-error/40" />
+                <span className="h-2 w-2 rounded-full bg-error shadow-[0_0_8px] shadow-error/50 animate-glow-pulse" />
                 <span className="text-sm font-semibold tabular-nums text-error">{scan.summary.critical}</span>
                 <span className="text-[10px] text-muted-foreground">critical</span>
               </div>
             )}
             {scan.summary.warning > 0 && (
               <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
-                <span className="h-2 w-2 rounded-full bg-warning" />
+                <span className="h-2 w-2 rounded-full bg-warning shadow-[0_0_6px] shadow-warning/40" />
                 <span className="text-sm font-semibold tabular-nums text-warning">{scan.summary.warning}</span>
                 <span className="text-[10px] text-muted-foreground">warnings</span>
               </div>
             )}
             <div className="flex items-center gap-1.5 px-3.5 py-2 border-r border-border/30">
-              <span className="h-2 w-2 rounded-full bg-info" />
+                <span className="h-2 w-2 rounded-full bg-info shadow-[0_0_6px] shadow-info/30" />
               <span className="text-sm font-semibold tabular-nums text-info">{scan.summary.info}</span>
               <span className="text-[10px] text-muted-foreground">info</span>
             </div>
@@ -950,7 +993,7 @@ function ScanResultsView({
               </div>
             ) : (
               <div className="relative">
-                <table className="w-full border-collapse font-mono text-[11px] leading-[1.6]">
+                <table className="w-full border-collapse font-mono text-[11px] leading-[1.65]">
                   <tbody>
                     {fileContent.split("\n").map((line, i) => {
                       const lineNum = i + 1
@@ -961,8 +1004,10 @@ function ScanResultsView({
                         <tr
                           key={i}
                           className={cn(
-                            "group",
-                            hasIssue && "bg-error/[0.06]"
+                            "group transition-colors",
+                            hasIssue
+                              ? "bg-error/[0.06]"
+                              : i % 2 === 1 && "bg-surface-secondary/30"
                           )}
                         >
                           <td className="sticky left-0 w-[1px] whitespace-nowrap border-r border-border/30 bg-surface-secondary/80 px-3 py-0 text-right text-[10px] text-muted-foreground/50 select-none">
@@ -995,10 +1040,10 @@ function ScanResultsView({
         {/* File Explorer */}
         <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>
           <div className="flex h-full flex-col bg-surface-secondary/20">
-            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+            <div className="flex items-center justify-between border-b border-border/40 bg-gradient-to-r from-surface-secondary/40 via-surface-secondary/20 to-transparent px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Folder className="icon-xs text-primary/70" />
-                <p className="text-xs font-medium text-foreground">Files</p>
+                <p className="text-xs font-semibold text-foreground font-display">Files</p>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] tabular-nums font-medium text-foreground/60">
@@ -1052,10 +1097,10 @@ function ScanResultsView({
         {/* Findings Panel */}
         <ResizablePanel defaultSize={50} minSize={25}>
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5">
+            <div className="flex items-center justify-between border-b border-border/40 bg-gradient-to-r from-surface-secondary/40 via-surface-secondary/20 to-transparent px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="icon-xs text-warning" />
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-xs font-semibold text-foreground font-display">
                   Findings
                   {scanning && (
                     <span className="ml-1 text-primary font-normal">(live)</span>
@@ -1126,10 +1171,10 @@ function ScanResultsView({
         {/* AI Chat Panel */}
         <ResizablePanel defaultSize={30} minSize={18} maxSize={45}>
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border/40 bg-surface-secondary/30 px-3 py-2.5 shrink-0">
+            <div className="flex items-center justify-between border-b border-border/40 bg-gradient-to-r from-surface-secondary/40 via-surface-secondary/20 to-transparent px-3 py-2.5 shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="icon-xs text-primary" />
-                <p className="text-xs font-medium text-foreground">Security Assistant</p>
+                <p className="text-xs font-semibold text-foreground font-display">Security Assistant</p>
               </div>
               <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
                 {scanning ? "Waiting..." : "Ready"}

@@ -29,6 +29,7 @@ export interface SemgrepFinding {
   endLine: number
   snippet: string
   category: string
+  referenceUrl?: string | null
 }
 
 interface ScanFindingsPanelProps {
@@ -43,7 +44,7 @@ interface ScanFindingsPanelProps {
 /**
  * Returns the appropriate icon and color for a finding severity level
  * @param {string} severity - Finding severity
- * @returns {{ Icon: React.ComponentType, colorClass: string, bgClass: string, label: string }}
+ * @returns {{ Icon: React.ComponentType, colorClass: string, bgClass: string, borderClass: string, barClass: string, label: string }}
  */
 function severityStyle(severity: string) {
   switch (severity) {
@@ -53,6 +54,7 @@ function severityStyle(severity: string) {
         colorClass: "text-error",
         bgClass: "bg-error/10 text-error hover:bg-error/10",
         borderClass: "border-error/20",
+        barClass: "severity-bar-error",
         label: "Critical",
       }
     case "WARNING":
@@ -61,6 +63,7 @@ function severityStyle(severity: string) {
         colorClass: "text-warning",
         bgClass: "bg-warning/10 text-warning hover:bg-warning/10",
         borderClass: "border-warning/20",
+        barClass: "severity-bar-warning",
         label: "Warning",
       }
     default:
@@ -69,6 +72,7 @@ function severityStyle(severity: string) {
         colorClass: "text-info",
         bgClass: "bg-info/10 text-info hover:bg-info/10",
         borderClass: "border-info/20",
+        barClass: "severity-bar-info",
         label: "Info",
       }
   }
@@ -102,7 +106,7 @@ function SnippetBlock({ snippet, startLine }: { snippet: string; startLine: numb
   return (
     <div className="group relative rounded-lg border border-border/30 bg-surface-tertiary overflow-hidden">
       <div className="flex items-center justify-between border-b border-border/20 bg-surface-secondary/40 px-3 py-1">
-        <span className="text-[9px] text-muted-foreground/60">
+        <span className="text-[9px] font-mono text-muted-foreground/60">
           Lines {startLine}–{startLine + lines.length - 1}
         </span>
         <button
@@ -113,6 +117,7 @@ function SnippetBlock({ snippet, startLine }: { snippet: string; startLine: numb
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           }}
+          aria-label="Copy snippet"
         >
           {copied ? <Check className="h-2.5 w-2.5 text-success" /> : <Copy className="h-2.5 w-2.5" />}
         </button>
@@ -121,7 +126,7 @@ function SnippetBlock({ snippet, startLine }: { snippet: string; startLine: numb
         <table className="w-full font-mono text-[10px] leading-[1.65]">
           <tbody>
             {lines.map((line, i) => (
-              <tr key={i} className="hover:bg-background/30">
+              <tr key={i} className="hover:bg-background/30 transition-colors">
                 <td className="w-[1px] whitespace-nowrap border-r border-border/20 px-2.5 py-0 text-right text-muted-foreground/40 select-none">
                   {startLine + i}
                 </td>
@@ -137,36 +142,35 @@ function SnippetBlock({ snippet, startLine }: { snippet: string; startLine: numb
   )
 }
 
+const EXPLANATION_MD_COMPONENTS = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="rounded bg-surface-tertiary px-1 py-0.5 text-[10px] font-mono text-primary/90">{children}</code>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-1.5 ml-3 list-disc space-y-0.5 last:mb-0">{children}</ul>,
+  ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-1.5 ml-3 list-decimal space-y-0.5 last:mb-0">{children}</ol>,
+  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+      {children}
+    </a>
+  ),
+}
+
 /**
  * Renders an AI explanation with markdown support
  * @param {{ content: string }} props
  */
 function ExplanationBlock({ content }: { content: string }) {
   return (
-    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] p-3">
+    <div className="rounded-lg border border-primary/15 bg-primary/[0.03] p-3 animate-scale-in">
       <div className="flex items-center gap-1.5 mb-2">
         <Sparkles className="h-3 w-3 text-primary" />
-        <span className="text-[10px] font-medium text-primary">AI Explanation</span>
+        <span className="text-[10px] font-semibold text-primary font-display">AI Explanation</span>
       </div>
       <div className="text-[11px] leading-relaxed text-foreground/85">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-            code: ({ children }) => (
-              <code className="rounded bg-surface-tertiary px-1 py-0.5 text-[10px] font-mono text-primary/90">{children}</code>
-            ),
-            ul: ({ children }) => <ul className="mb-1.5 ml-3 list-disc space-y-0.5 last:mb-0">{children}</ul>,
-            ol: ({ children }) => <ol className="mb-1.5 ml-3 list-decimal space-y-0.5 last:mb-0">{children}</ol>,
-            li: ({ children }) => <li>{children}</li>,
-            a: ({ href, children }) => (
-              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
-                {children}
-              </a>
-            ),
-          }}
-        >
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={EXPLANATION_MD_COMPONENTS}>
           {content}
         </ReactMarkdown>
       </div>
@@ -220,10 +224,10 @@ export function ScanFindingsPanel({
   if (findings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10 glow-success">
           <Info className="icon-md text-success" />
         </div>
-        <p className="mt-3 text-sm font-medium text-foreground">No findings</p>
+        <p className="mt-3 text-sm font-semibold text-foreground font-display">No findings</p>
         <p className="text-xs text-muted-foreground">This scan found no security issues</p>
       </div>
     )
@@ -243,8 +247,10 @@ export function ScanFindingsPanel({
             <div
               key={filePath}
               className={cn(
-                "rounded-xl border transition-colors",
-                isHighlighted ? "border-primary/20 bg-primary/5" : "border-border/50 bg-surface-secondary/50"
+                "rounded-xl border transition-all duration-200",
+                isHighlighted
+                  ? "border-primary/20 bg-primary/5 glow-primary"
+                  : "border-border/50 bg-surface-secondary/50 hover:border-border/70"
               )}
             >
               <button
@@ -259,7 +265,7 @@ export function ScanFindingsPanel({
                   )}
                 />
                 <FileCode className="icon-xs shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground font-mono">
                   {filePath}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
@@ -280,9 +286,9 @@ export function ScanFindingsPanel({
               </button>
 
               {isFileExpanded && (
-                <div className="border-t border-border/30 px-3 py-2 space-y-2">
+                <div className="border-t border-border/30 px-3 py-2 space-y-2 animate-slide-up-fade">
                   {items.map(({ finding, index }) => {
-                    const { Icon, bgClass, borderClass, label } = severityStyle(finding.severity)
+                    const { Icon, bgClass, borderClass, barClass, label } = severityStyle(finding.severity)
                     const isFindingExpanded = expandedFindings.has(index)
                     const explanation = explanations[String(index)]
                     const isExplaining = loadingExplanation === index
@@ -291,8 +297,8 @@ export function ScanFindingsPanel({
                       <div
                         key={index}
                         className={cn(
-                          "rounded-lg border bg-background/60 transition-colors",
-                          isFindingExpanded ? borderClass : "border-border/30"
+                          "rounded-lg border bg-background/60 transition-all duration-200",
+                          isFindingExpanded ? cn(borderClass, barClass) : "border-border/30"
                         )}
                       >
                         <button
@@ -310,7 +316,7 @@ export function ScanFindingsPanel({
                               <span className="font-mono text-foreground/50">
                                 L{finding.startLine}–{finding.endLine}
                               </span>
-                              <span className="truncate text-muted-foreground/60">{finding.ruleId}</span>
+                              <span className="truncate text-muted-foreground/60 font-mono text-[9px]">{finding.ruleId}</span>
                             </div>
                           </div>
                           <ChevronDown
@@ -322,16 +328,16 @@ export function ScanFindingsPanel({
                         </button>
 
                         {isFindingExpanded && (
-                          <div className="border-t border-border/20 px-3 py-2.5 space-y-2.5">
+                          <div className="border-t border-border/20 px-3 py-2.5 space-y-2.5 animate-slide-up-fade">
                             {finding.snippet && (
                               <SnippetBlock snippet={finding.snippet} startLine={finding.startLine} />
                             )}
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-xs gap-1.5 rounded-lg"
+                                className="h-7 text-xs gap-1.5 rounded-lg active:scale-[0.97] transition-transform"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   onFileClick(finding.filePath)
@@ -345,7 +351,7 @@ export function ScanFindingsPanel({
                                 size="sm"
                                 variant="outline"
                                 className={cn(
-                                  "h-7 text-xs gap-1.5 rounded-lg",
+                                  "h-7 text-xs gap-1.5 rounded-lg group/explain active:scale-[0.97] transition-all",
                                   explanation && "border-primary/20 text-primary"
                                 )}
                                 disabled={isExplaining || !!explanation}
@@ -357,10 +363,23 @@ export function ScanFindingsPanel({
                                 {isExplaining ? (
                                   <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
-                                  <Sparkles className="h-3 w-3" />
+                                  <Sparkles className="h-3 w-3 group-hover/explain:rotate-12 transition-transform duration-300" />
                                 )}
                                 {explanation ? "Explained" : "Explain with AI"}
                               </Button>
+
+                              {finding.referenceUrl && (
+                                <a
+                                  href={finding.referenceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:border-border"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Learn more
+                                </a>
+                              )}
                             </div>
 
                             {explanation && <ExplanationBlock content={explanation} />}
