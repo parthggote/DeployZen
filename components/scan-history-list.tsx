@@ -53,6 +53,7 @@ interface ScanHistoryListProps {
   selectedId: string | null
   onSelect: (scanId: string) => void
   onDelete: (scanId: string) => void | Promise<void>
+  viewportClassName?: string
 }
 
 /**
@@ -98,7 +99,14 @@ function statusMeta(status: string) {
  * Displays a scrollable list of past scans with status indicators and delete action
  * @param {ScanHistoryListProps} props - Component props
  */
-export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete }: ScanHistoryListProps) {
+export function ScanHistoryList({
+  scans,
+  loading,
+  selectedId,
+  onSelect,
+  onDelete,
+  viewportClassName,
+}: ScanHistoryListProps) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
@@ -138,7 +146,7 @@ export function ScanHistoryList({ scans, loading, selectedId, onSelect, onDelete
 
   return (
     <>
-      <ScrollArea className="h-[20rem]">
+      <ScrollArea className={cn("h-[18rem] sm:h-[20rem]", viewportClassName)}>
         <div className="space-y-1 pr-3">
           {scans.map((scan) => {
             const { Icon, color, spin } = statusMeta(scan.status) as { Icon: React.ComponentType<{ className?: string }>; color: string; spin?: boolean }
