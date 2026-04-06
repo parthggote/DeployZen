@@ -61,8 +61,25 @@ export function RecentActivity() {
 
   useEffect(() => {
     fetchActivity()
-    const interval = setInterval(fetchActivity, 10000)
-    return () => clearInterval(interval)
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (interval) return
+      interval = setInterval(fetchActivity, 30_000)
+    }
+    const stop = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+    const onVis = () => {
+      if (document.hidden) stop()
+      else { fetchActivity(); start() }
+    }
+
+    start()
+    document.addEventListener("visibilitychange", onVis)
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis) }
   }, [])
 
   const filtered = filter === "all"
@@ -100,7 +117,7 @@ export function RecentActivity() {
             const Icon = statusIconMap[activity.type] || statusIconMap[activity.status] || Clock
             return (
               <div
-                key={i}
+                key={`${activity.time}-${activity.title}-${i}`}
                 className="flex items-start gap-3 cursor-pointer rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-secondary/60"
                 onClick={() => setSelected(activity)}
                 tabIndex={0}

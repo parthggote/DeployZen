@@ -156,16 +156,16 @@ export default function MonitoringPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between animate-slide-up-fade">
         <div className="space-y-1">
-          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Runtime monitor</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem] font-display">Runtime monitor</h1>
           <p className="text-sm text-muted-foreground">Live deployment state and inference metrics.</p>
         </div>
         <div className="flex items-center gap-3">
           {failedModels.length > 0 && (
             <Badge variant="secondary" className="rounded-full bg-error/10 text-error">{failedModels.length} failed</Badge>
           )}
-          <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
+          <Button variant="outline" className="rounded-full border-border/70 bg-background/80 active:scale-[0.97] transition-transform" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing" : "Refresh"}
           </Button>
@@ -174,15 +174,15 @@ export default function MonitoringPage() {
 
       {/* Stat cards */}
       <section className="grid gap-4 md:grid-cols-3">
-        {statusBlocks.map((item) => (
-          <div key={item.label} className="rounded-2xl border border-border/60 bg-surface/80 p-5">
+        {statusBlocks.map((item, idx) => (
+          <div key={item.label} className={`rounded-2xl border border-border/60 bg-surface/80 p-5 animate-slide-up-fade stagger-${idx + 1}`}>
             <div className="mb-3">
               <div className={`inline-flex rounded-xl p-2 ${item.surface}`}>
                 <item.icon className={`h-4 w-4 ${item.tone}`} />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">{item.label}</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight">{item.value}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight font-mono tabular-nums">{item.value}</p>
           </div>
         ))}
       </section>
@@ -191,7 +191,7 @@ export default function MonitoringPage() {
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Runtime inventory</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Runtime inventory</CardTitle>
           </CardHeader>
           <CardContent>
             {models.length === 0 ? (
@@ -212,6 +212,7 @@ export default function MonitoringPage() {
                       <div key={model.id} className="overflow-hidden rounded-xl border border-border/70 bg-background/80">
                         <button
                           type="button"
+                          aria-expanded={isOpen}
                           className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-surface-secondary/50"
                           onClick={() => setExpandedModel(isOpen ? null : model.id)}
                         >
@@ -228,19 +229,19 @@ export default function MonitoringPage() {
                         </button>
 
                         {isOpen && (
-                          <div className="border-t border-border/60 px-4 pb-4 pt-3">
+                          <div className="border-t border-border/60 px-4 pb-4 pt-3 animate-slide-up-fade">
                             <div className="grid gap-3 sm:grid-cols-3">
                               <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
-                                <p className="mt-1 text-sm font-semibold">{modelMetric?.requestCount || 0}</p>
+                                <p className="mt-1 text-sm font-semibold font-mono tabular-nums">{modelMetric?.requestCount || 0}</p>
                               </div>
                               <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg latency</p>
-                                <p className="mt-1 text-sm font-semibold">{modelMetric?.avgLatencyMs ? `${modelMetric.avgLatencyMs}ms` : "—"}</p>
+                                <p className="mt-1 text-sm font-semibold font-mono tabular-nums">{modelMetric?.avgLatencyMs ? `${modelMetric.avgLatencyMs}ms` : "—"}</p>
                               </div>
                               <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Errors</p>
-                                <p className="mt-1 text-sm font-semibold text-error">{modelMetric?.errorCount || 0}</p>
+                                <p className="mt-1 text-sm font-semibold font-mono tabular-nums text-error">{modelMetric?.errorCount || 0}</p>
                               </div>
                             </div>
                             {modelMetric?.lastError && (
@@ -264,7 +265,7 @@ export default function MonitoringPage() {
 
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Inference telemetry</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Inference telemetry</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Quick stats */}

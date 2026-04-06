@@ -116,6 +116,7 @@ export default function UploadModelPage() {
   const [deployHFId, setDeployHFId] = useState("")
   const [deployTask, setDeployTask] = useState("text-generation")
 
+  const [disconnecting, setDisconnecting] = useState(false)
   const [inferModelId, setInferModelId] = useState<string | null>(null)
   const [inferInput, setInferInput] = useState("")
   const [inferResult, setInferResult] = useState<string | null>(null)
@@ -356,12 +357,15 @@ export default function UploadModelPage() {
    * Disconnects the Hugging Face account
    */
   const disconnectHF = async () => {
+    setDisconnecting(true)
     try {
       await fetch("/api/auth/huggingface/disconnect", { method: "POST" })
       setHfUser(null)
       toast({ title: "Hugging Face disconnected" })
     } catch {
       toast({ title: "Disconnect failed" })
+    } finally {
+      setDisconnecting(false)
     }
   }
 
@@ -397,9 +401,9 @@ export default function UploadModelPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between animate-slide-up-fade">
         <div className="space-y-1">
-          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Model deployments</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem] font-display">Model deployments</h1>
           <p className="text-sm text-muted-foreground">Register Hugging Face models and test inference.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -415,8 +419,8 @@ export default function UploadModelPage() {
                 <CheckCircle className="h-3 w-3 text-success" />
               </div>
               <span className="text-xs font-medium">{hfUser.hfUsername}</span>
-              <button onClick={disconnectHF} className="ml-1 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-error">
-                <Unplug className="h-3 w-3" />
+              <button onClick={disconnectHF} disabled={disconnecting} className="ml-1 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-error disabled:opacity-50">
+                {disconnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unplug className="h-3 w-3" />}
               </button>
             </div>
           ) : (
@@ -614,7 +618,7 @@ export default function UploadModelPage() {
       {/* Model list */}
       <Card className="border-border/70 bg-surface/80 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Registered models</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground font-display">Registered models</CardTitle>
         </CardHeader>
         <CardContent>
           {models.length === 0 ? (
@@ -639,6 +643,7 @@ export default function UploadModelPage() {
                     <div key={model.id} className="overflow-hidden rounded-xl border border-border/70 bg-background/80">
                       <button
                         type="button"
+                        aria-expanded={isOpen}
                         className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-surface-secondary/50"
                         onClick={() => setExpandedModel(isOpen ? null : model.id)}
                       >
@@ -665,7 +670,7 @@ export default function UploadModelPage() {
                       </button>
 
                       {isOpen && (
-                        <div className="border-t border-border/60 px-4 pb-4 pt-3">
+                        <div className="border-t border-border/60 px-4 pb-4 pt-3 animate-slide-up-fade">
                           {model.status === "Failed" && model.statusError && (
                             <div className="mb-3 rounded-lg border border-error/20 bg-error/5 px-3 py-2">
                               <p className="text-xs text-error">{model.statusError}</p>
@@ -683,7 +688,7 @@ export default function UploadModelPage() {
                             </div>
                             <div className="rounded-xl border border-border/60 bg-surface-secondary p-3">
                               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
-                              <p className="mt-1 text-sm font-semibold">{model.metrics?.totalRequests || 0}</p>
+                              <p className="mt-1 text-sm font-semibold font-mono tabular-nums">{model.metrics?.totalRequests || 0}</p>
                             </div>
                           </div>
 

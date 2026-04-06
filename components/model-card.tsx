@@ -58,10 +58,14 @@ function getStatusIcon(status: string) {
 export function ModelCard({ model }: ModelCardProps) {
   const chartData = useMemo(() => {
     if (model.status === "running") {
-      return Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + model.latency - 10)
+      const seed = model.name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
+      return Array.from({ length: 6 }, (_, i) => {
+        const pseudo = ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280
+        return Math.floor(pseudo * 20) + model.latency - 10
+      })
     }
     return [0, 0, 0, 0, 0, 0]
-  }, [model.status, model.latency])
+  }, [model.status, model.latency, model.name])
 
   const chartColor = model.status === "running"
     ? "hsl(var(--success))"

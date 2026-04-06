@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type KanbanColumnId = "to-test" | "in-progress" | "deployed" | "failed"
@@ -325,9 +326,9 @@ export default function KanbanPage() {
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between animate-slide-up-fade">
         <div className="space-y-1">
-          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Release board</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem] font-display">Release board</h1>
           <p className="text-sm text-muted-foreground">
             Drag items across stages to track API and model work.
           </p>
@@ -338,13 +339,13 @@ export default function KanbanPage() {
             <span className="text-success font-medium">{deployedItems} deployed</span>
             {failedItems > 0 && <span className="text-error font-medium">{failedItems} failed</span>}
           </div>
-          <Button variant="outline" className="rounded-full border-border/70 bg-background/80" onClick={handleRefresh} disabled={refreshing}>
+          <Button variant="outline" className="rounded-full border-border/70 bg-background/80 active:scale-[0.97] transition-transform" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`mr-2 icon-sm ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing" : "Refresh"}
           </Button>
           <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
             <DialogTrigger asChild>
-              <Button className="rounded-full px-5">
+              <Button className="rounded-full px-5 active:scale-[0.97] transition-transform">
                 <Plus className="mr-2 icon-sm" />
                 Add item
               </Button>
@@ -451,9 +452,27 @@ export default function KanbanPage() {
       </section>
 
       {loading ? (
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
-          <CardContent className="py-16 text-center text-sm text-muted-foreground">Loading board items...</CardContent>
-        </Card>
+        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {COLUMN_ORDER.map((col) => (
+            <Card key={col.id} className="border-border/70 border-t-4 border-t-muted bg-surface/80 shadow-sm">
+              <CardHeader className="pb-3">
+                <Skeleton className="h-5 w-24" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border/60 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-7 w-7 rounded-xl" />
+                      <Skeleton className="h-4 w-16 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3.5 w-[70%]" />
+                    <Skeleton className="h-3 w-[50%]" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </section>
       ) : error ? (
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardContent className="py-16 text-center">
@@ -464,12 +483,12 @@ export default function KanbanPage() {
         </Card>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <section className="grid gap-6 xl:grid-cols-4">
+          <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {columns.map((column) => (
               <Droppable droppableId={column.id} key={column.id}>
                 {(provided, snapshot) => (
                   <Card
-                    className={`flex h-[70vh] min-h-[34rem] flex-col border-border/70 border-t-4 ${getColumnTone(column.id)} bg-surface/80 shadow-sm ${
+                    className={`flex h-[60vh] min-h-[24rem] max-h-[40rem] flex-col border-border/70 border-t-4 ${getColumnTone(column.id)} bg-surface/80 shadow-sm ${
                       snapshot.isDraggingOver ? "ring-2 ring-primary/25" : ""
                     }`}
                   >

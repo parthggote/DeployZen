@@ -404,9 +404,9 @@ export default function UploadAPIPage() {
   return (
     <div className="space-y-6">
       {/* ── Compact header ── */}
-      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between animate-slide-up-fade">
         <div className="space-y-1">
-          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Validate API contracts</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem] font-display">Validate API contracts</h1>
           <p className="text-sm text-muted-foreground">
             Upload source, generate checks, and review outcomes.
           </p>
@@ -466,12 +466,12 @@ export default function UploadAPIPage() {
         {/* Right: Source code preview */}
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Source preview</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Source preview</CardTitle>
           </CardHeader>
           <CardContent>
             {sourceCode ? (
               <ScrollArea className="h-[16rem] rounded-2xl border border-border/70 bg-background/90">
-                <pre className="whitespace-pre-wrap p-4 text-xs leading-6 text-muted-foreground">{sourceCode}</pre>
+                <pre className="whitespace-pre-wrap p-4 text-xs leading-6 text-muted-foreground font-mono">{sourceCode}</pre>
               </ScrollArea>
             ) : (
               <div className="flex h-[16rem] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-background/70 text-sm text-muted-foreground">
@@ -484,10 +484,10 @@ export default function UploadAPIPage() {
 
       {/* ── Actions row ── */}
       <section className="flex flex-wrap items-center gap-3">
-        <Button onClick={handleGenerateTests} disabled={isGenerating || !uploadedApi} className="rounded-full">
+        <Button onClick={handleGenerateTests} disabled={isGenerating || !uploadedApi} className="rounded-full active:scale-[0.97] transition-transform">
           {isGenerating ? <><Clock className="mr-2 icon-sm animate-spin" />Generating</> : <><Sparkles className="mr-2 icon-sm" />Generate tests</>}
         </Button>
-        <Button onClick={() => handleExecuteTests()} disabled={isExecuting || !uploadedApi || uploadedApi.testCases.length === 0} variant="outline" className="rounded-full border-border/70 bg-background/80">
+        <Button onClick={() => handleExecuteTests()} disabled={isExecuting || !uploadedApi || uploadedApi.testCases.length === 0} variant="outline" className="rounded-full border-border/70 bg-background/80 active:scale-[0.97] transition-transform">
           {isExecuting ? <><Clock className="mr-2 icon-sm animate-spin" />Validating</> : <><Play className="mr-2 icon-sm" />Run all checks</>}
         </Button>
         {uploadedApi && uploadedApi.testCases.length > 0 && (
@@ -531,7 +531,7 @@ export default function UploadAPIPage() {
       {uploadedApi?.securityAnalysis && (
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base font-medium">Security analysis</CardTitle>
+            <CardTitle className="text-base font-medium font-display">Security analysis</CardTitle>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleCopyAnalysis(uploadedApi.securityAnalysis!)}>
                 {copied ? <Check className="mr-1.5 icon-xs text-success" /> : <Clipboard className="mr-1.5 icon-xs" />}
@@ -558,16 +558,16 @@ export default function UploadAPIPage() {
       {/* ── Validation summary ── */}
       {uploadedApi && uploadedApi.testCases.length > 0 && (
         <section className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center">
-            <div className="text-3xl font-semibold text-success">{uploadedApi.passedTests}</div>
+          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center animate-slide-up-fade stagger-1">
+            <div className="text-3xl font-semibold text-success font-mono tabular-nums">{uploadedApi.passedTests}</div>
             <div className="mt-1 text-sm text-muted-foreground">Passed</div>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center">
-            <div className="text-3xl font-semibold text-error">{uploadedApi.failedTests}</div>
+          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center animate-slide-up-fade stagger-2">
+            <div className="text-3xl font-semibold text-error font-mono tabular-nums">{uploadedApi.failedTests}</div>
             <div className="mt-1 text-sm text-muted-foreground">Failed</div>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center">
-            <div className="text-3xl font-semibold">{uploadedApi.totalTests}</div>
+          <div className="rounded-2xl border border-border/60 bg-surface/80 p-5 text-center animate-slide-up-fade stagger-3">
+            <div className="text-3xl font-semibold font-mono tabular-nums">{uploadedApi.totalTests}</div>
             <div className="mt-1 text-sm text-muted-foreground">Total</div>
           </div>
         </section>
@@ -578,7 +578,7 @@ export default function UploadAPIPage() {
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="space-y-3 pb-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <CardTitle className="text-base font-medium">Generated test cases</CardTitle>
+              <CardTitle className="text-base font-medium font-display">Generated test cases</CardTitle>
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORY_OPTIONS.map((opt) => (
                   <Button key={opt.value} variant={categoryFilter === opt.value ? "default" : "outline"} size="sm" className="h-7 rounded-full px-3 text-xs" onClick={() => setCategoryFilter(opt.value)}>
@@ -609,6 +609,7 @@ export default function UploadAPIPage() {
                       <div key={test.id} className="overflow-hidden rounded-2xl border border-border/70 bg-background/80 shadow-sm">
                         <button
                           type="button"
+                          aria-expanded={isOpen}
                           className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-secondary/50"
                           onClick={() => setExpandedTest(isOpen ? null : test.id)}
                         >
@@ -629,7 +630,7 @@ export default function UploadAPIPage() {
                         </button>
 
                         {isOpen && (
-                          <div className="border-t border-border/60 px-5 pb-5 pt-4">
+                          <div className="border-t border-border/60 px-5 pb-5 pt-4 animate-slide-up-fade">
                             <ScrollArea className="h-[20rem]">
                               <div className="space-y-4 pr-4">
                                 <p className="text-sm text-muted-foreground">{test.description}</p>
@@ -637,11 +638,11 @@ export default function UploadAPIPage() {
                                 <div className="grid gap-3 md:grid-cols-2">
                                   <div>
                                     <p className="mb-1.5 text-xs font-medium">Headers</p>
-                                    <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs">{JSON.stringify(test.headers || {}, null, 2)}</pre>
+                                    <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs font-mono">{JSON.stringify(test.headers || {}, null, 2)}</pre>
                                   </div>
                                   <div>
                                     <p className="mb-1.5 text-xs font-medium">Body / Query</p>
-                                    <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs">{JSON.stringify({ query: test.query || {}, body: test.body || null }, null, 2)}</pre>
+                                    <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs font-mono">{JSON.stringify({ query: test.query || {}, body: test.body || null }, null, 2)}</pre>
                                   </div>
                                 </div>
 
@@ -667,7 +668,7 @@ export default function UploadAPIPage() {
 
                                 <div>
                                   <p className="mb-1.5 text-xs font-medium">Generated preview</p>
-                                  <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs text-muted-foreground">{test.testCode}</pre>
+                                  <pre className="overflow-x-auto rounded-xl border border-border/70 bg-background/90 p-3 text-xs text-muted-foreground font-mono">{test.testCode}</pre>
                                 </div>
 
                                 {test.result && (

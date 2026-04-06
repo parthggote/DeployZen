@@ -80,16 +80,16 @@ export function DashboardHeader() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
+              <DropdownMenuItem disabled className="transition-colors hover:bg-surface-secondary opacity-50 cursor-not-allowed">
                 <User className="icon-sm mr-2" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
+              <DropdownMenuItem disabled className="transition-colors hover:bg-surface-secondary opacity-50 cursor-not-allowed">
                 <Settings className="icon-sm mr-2" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-error transition-colors hover:bg-error/10">
+              <DropdownMenuItem disabled className="text-error transition-colors hover:bg-error/10 opacity-50 cursor-not-allowed">
                 <LogOut className="icon-sm mr-2" />
                 Log out
               </DropdownMenuItem>

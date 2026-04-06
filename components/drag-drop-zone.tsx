@@ -39,13 +39,18 @@ export function DragDropZone({
   }
 
   /**
+   * Validates dropped files against accepted extensions and forwards valid ones
    * @param {React.DragEvent} e - Drop event with files
    */
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setIsDragOver(false)
-    const files = Array.from(e.dataTransfer.files)
-    onFileSelect?.(files)
+    const extensions = acceptedTypes.split(",").map((t) => t.trim().toLowerCase())
+    const files = Array.from(e.dataTransfer.files).filter((f) => {
+      const ext = `.${f.name.split(".").pop()?.toLowerCase()}`
+      return extensions.includes(ext)
+    })
+    if (files.length > 0) onFileSelect?.(files)
   }
 
   /**

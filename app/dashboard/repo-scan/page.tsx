@@ -1032,10 +1032,10 @@ function ScanResultsView({
         </Card>
       )}
 
-      {/* Three-column resizable layout */}
+      {/* Three-column resizable layout (hidden below lg, stacked fallback shown instead) */}
       <ResizablePanelGroup
         direction="horizontal"
-        className="flex-1 min-h-0 rounded-2xl border border-border/50 overflow-hidden"
+        className="hidden lg:flex flex-1 min-h-0 rounded-2xl border border-border/50 overflow-hidden"
       >
         {/* File Explorer */}
         <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>
@@ -1191,6 +1191,54 @@ function ScanResultsView({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Stacked mobile fallback for screens below lg */}
+      <div className="flex flex-col gap-4 lg:hidden min-h-0">
+        <Card className="rounded-2xl border-border/50 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border/40 bg-surface-secondary/40 px-3 py-2.5">
+            <Folder className="icon-xs text-primary/70" />
+            <p className="text-xs font-semibold text-foreground font-display">Files</p>
+          </div>
+          <div className="max-h-[16rem] overflow-auto px-1 py-1">
+            {hasFiles ? (
+              <RepoFileExplorer fileTree={scan.fileTree} selectedFile={selectedFile} loadingFile={loadingFile} onFileSelect={onFileSelect} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/50">
+                <Folder className="h-5 w-5" />
+                <p className="mt-1 text-[11px]">No files</p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border-border/50 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border/40 bg-surface-secondary/40 px-3 py-2.5">
+            <AlertTriangle className="icon-xs text-warning" />
+            <p className="text-xs font-semibold text-foreground font-display">Findings</p>
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 tabular-nums">{scan.findings.length}</Badge>
+          </div>
+          <div className="max-h-[24rem] overflow-auto px-2 py-1">
+            {hasFindings ? (
+              <ScanFindingsPanel findings={scan.findings} explanations={explanations} loadingExplanation={loadingExplanation} selectedFile={selectedFile} onExplain={onExplain} onFileClick={onFileSelect} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/50">
+                <Shield className="h-5 w-5" />
+                <p className="mt-1 text-[11px]">No findings</p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border-border/50 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border/40 bg-surface-secondary/40 px-3 py-2.5">
+            <Sparkles className="icon-xs text-primary" />
+            <p className="text-xs font-semibold text-foreground font-display">Security Assistant</p>
+          </div>
+          <div className="h-[20rem] overflow-hidden">
+            <ScanChatPanel scanId={scan._id} chatHistory={chatHistory} onNewMessage={onNewChatMessage} selectedFindingIndex={selectedFindingIndex} />
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

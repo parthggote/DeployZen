@@ -152,16 +152,16 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* ── Compact header ── */}
-      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between animate-slide-up-fade">
         <div className="space-y-1">
-          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem]">Workspace overview</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] md:text-[1.75rem] font-display">Workspace overview</h1>
           <p className="text-sm text-muted-foreground">APIs, models, and recent runs at a glance.</p>
         </div>
         <div className="flex items-center gap-3">
           {failedTests > 0 && (
             <Badge variant="secondary" className="rounded-full bg-error/10 text-error">{failedTests} failed checks</Badge>
           )}
-          <Button onClick={handleRefresh} disabled={refreshing} variant="outline" className="rounded-full border-border/70 bg-background/80">
+          <Button onClick={handleRefresh} disabled={refreshing} variant="outline" className="rounded-full border-border/70 bg-background/80 active:scale-[0.97] transition-transform">
             <RefreshCw className={`mr-2 icon-sm ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing" : "Refresh"}
           </Button>
@@ -171,14 +171,14 @@ export default function DashboardPage() {
       {/* ── Stat cards ── */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {statCardStyles.map((style, index) => (
-          <div key={style.title} className="rounded-2xl border border-border/60 bg-surface/80 p-5">
+          <div key={style.title} className={`rounded-2xl border border-border/60 bg-surface/80 p-5 animate-slide-up-fade stagger-${index + 1}`}>
             <div className="mb-3 flex items-center justify-between">
               <div className={`rounded-xl p-2 ${style.surface}`}>
                 <style.icon className={`icon-sm ${style.tone}`} />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">{style.title}</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight">{statValues[index].value}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight font-mono tabular-nums">{statValues[index].value}</p>
             <p className="mt-1 text-xs text-muted-foreground">{statValues[index].detail}</p>
           </div>
         ))}
@@ -186,18 +186,18 @@ export default function DashboardPage() {
 
       {/* ── Chart + Activity side-by-side ── */}
       <section className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
+        <Card className="border-border/70 bg-surface/80 shadow-sm animate-slide-up-fade stagger-5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Performance overview</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Performance overview</CardTitle>
           </CardHeader>
           <CardContent>
             <StatsChart />
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 bg-surface/80 shadow-sm">
+        <Card className="border-border/70 bg-surface/80 shadow-sm animate-slide-up-fade stagger-5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Recent activity</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
             <RecentActivity />
@@ -209,7 +209,7 @@ export default function DashboardPage() {
       <section className="grid gap-6 xl:grid-cols-2">
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Deployed models</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Deployed models</CardTitle>
             <Link href="/dashboard/upload-model">
               <Button variant="ghost" size="sm" className="h-7 rounded-full px-3 text-xs">
                 View all <ArrowRight className="ml-1 icon-xs" />
@@ -257,7 +257,7 @@ export default function DashboardPage() {
 
         <Card className="border-border/70 bg-surface/80 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Recent APIs</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground font-display">Recent APIs</CardTitle>
             <Link href="/dashboard/upload-api">
               <Button variant="ghost" size="sm" className="h-7 rounded-full px-3 text-xs">
                 View all <ArrowRight className="ml-1 icon-xs" />

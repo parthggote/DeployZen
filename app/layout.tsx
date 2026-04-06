@@ -27,9 +27,9 @@ export const metadata: Metadata = {
   description: "AI-Powered Testing and LLM Deployment Assistant",
   generator: 'v0.dev',
   icons: {
-    icon: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
-    shortcut: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
-    apple: '/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png',
+    icon: '/deployzen-icon.png',
+    shortcut: '/deployzen-icon.png',
+    apple: '/deployzen-icon.png',
   },
 }
 
@@ -41,8 +41,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" type="image/png" />
-        <link rel="shortcut icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" />
+        <link rel="icon" href="/deployzen-icon.png" type="image/png" />
+        <link rel="shortcut icon" href="/deployzen-icon.png" />
       </head>
       <body className={`${outfit.className} ${outfit.variable} ${sora.variable} ${jetbrainsMono.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

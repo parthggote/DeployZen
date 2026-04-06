@@ -71,10 +71,25 @@ export function DashboardSidebar() {
 
   useEffect(() => {
     fetchSystemHealth().then(setHealth)
-    const interval = setInterval(() => {
-      fetchSystemHealth().then(setHealth)
-    }, 60_000)
-    return () => clearInterval(interval)
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (interval) return
+      interval = setInterval(() => fetchSystemHealth().then(setHealth), 60_000)
+    }
+    const stop = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+    const onVis = () => {
+      if (document.hidden) stop()
+      else { fetchSystemHealth().then(setHealth); start() }
+    }
+
+    start()
+    document.addEventListener("visibilitychange", onVis)
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis) }
   }, [])
 
   useEffect(() => {
@@ -121,7 +136,7 @@ export function DashboardSidebar() {
           <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
             <div className="relative shrink-0 rounded-xl border border-border/50 bg-background p-1 shadow-sm">
               <img
-                src="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png"
+                src="/deployzen-icon.png"
                 alt="DeployZen"
                 className="h-7 w-7 rounded-lg"
               />
