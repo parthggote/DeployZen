@@ -91,8 +91,8 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
   }
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="relative shrink-0">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 icon-sm text-muted-foreground" />
         <Input
           placeholder="Search repositories..."
@@ -102,7 +102,7 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
         />
       </div>
 
-      <ScrollArea className={cn("h-[16rem] sm:h-[18rem]", listClassName)}>
+      <ScrollArea className={cn("h-[16rem] sm:h-[18rem] min-h-0 flex-1", listClassName)}>
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="icon-md animate-spin text-muted-foreground" />
