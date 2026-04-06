@@ -47,12 +47,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: "Hugging Face not connected" }, { status: 401 })
     }
 
-    const mergedParams = {
-      max_new_tokens: model.config?.maxTokens || 256,
-      temperature: model.config?.temperature || 0.7,
-      top_p: model.config?.topP || 0.9,
-      ...parameters,
-    }
+    const generationTasks = ["text-generation", "conversational", "text2text-generation"]
+    const isGeneration = generationTasks.includes(model.task || "")
+
+    const mergedParams = isGeneration
+      ? {
+          max_new_tokens: model.config?.maxTokens || 256,
+          temperature: model.config?.temperature || 0.7,
+          top_p: model.config?.topP || 0.9,
+          ...parameters,
+        }
+      : { ...parameters }
 
     const result = await runHuggingFaceInference(
       model.huggingFaceModelId,
