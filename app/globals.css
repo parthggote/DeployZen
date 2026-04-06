@@ -4,24 +4,24 @@
 
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 0 0% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --background: 150 6% 98%;
+    --foreground: 150 8% 8%;
+    --card: 150 4% 100%;
+    --card-foreground: 150 8% 8%;
+    --popover: 150 4% 100%;
+    --popover-foreground: 150 8% 8%;
     --primary: 152 45% 36%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 12%;
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 42%;
+    --secondary: 150 4% 94%;
+    --secondary-foreground: 150 6% 12%;
+    --muted: 150 4% 93%;
+    --muted-foreground: 150 4% 40%;
     --accent: 150 20% 95%;
     --accent-foreground: 152 40% 26%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
+    --border: 150 5% 87%;
+    --input: 150 5% 87%;
     --ring: 152 45% 36%;
     --radius: 1rem;
     --chart-1: 152 45% 36%;
@@ -30,41 +30,39 @@
     --chart-4: 12 76% 58%;
     --chart-5: 271 58% 56%;
 
-    /* Custom DeployZen colors */
     --success: 152 45% 36%;
     --success-foreground: 0 0% 100%;
     --error: 0 72% 52%;
     --error-foreground: 0 0% 98%;
     --warning: 36 89% 52%;
     --warning-foreground: 0 0% 9%;
-    --info: 168 50% 38%;
+    --info: 198 55% 42%;
     --info-foreground: 0 0% 98%;
 
-    /* Surface colors */
-    --surface: 0 0% 100%;
-    --surface-secondary: 0 0% 96%;
-    --surface-tertiary: 0 0% 93%;
+    --surface: 150 4% 100%;
+    --surface-secondary: 150 5% 95%;
+    --surface-tertiary: 150 4% 92%;
   }
 
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 6%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 6%;
-    --popover-foreground: 0 0% 95%;
+    --background: 152 8% 4%;
+    --foreground: 150 6% 95%;
+    --card: 152 6% 7%;
+    --card-foreground: 150 6% 95%;
+    --popover: 152 6% 7%;
+    --popover-foreground: 150 6% 95%;
     --primary: 152 42% 48%;
-    --primary-foreground: 0 0% 4%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 60%;
+    --primary-foreground: 152 8% 4%;
+    --secondary: 150 5% 12%;
+    --secondary-foreground: 150 4% 95%;
+    --muted: 150 5% 13%;
+    --muted-foreground: 150 4% 58%;
     --accent: 152 20% 12%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
+    --border: 150 5% 17%;
+    --input: 150 5% 17%;
     --ring: 152 42% 48%;
     --chart-1: 152 42% 48%;
     --chart-2: 159 67% 42%;
@@ -72,20 +70,18 @@
     --chart-4: 12 76% 58%;
     --chart-5: 271 58% 62%;
 
-    /* Custom DeployZen colors - dark mode */
     --success: 152 42% 48%;
-    --success-foreground: 0 0% 4%;
+    --success-foreground: 152 8% 4%;
     --error: 0 78% 63%;
     --error-foreground: 0 0% 4%;
     --warning: 36 89% 57%;
     --warning-foreground: 0 0% 4%;
-    --info: 168 45% 48%;
+    --info: 198 50% 52%;
     --info-foreground: 0 0% 4%;
 
-    /* Surface colors - dark mode */
-    --surface: 0 0% 6%;
-    --surface-secondary: 0 0% 10%;
-    --surface-tertiary: 0 0% 14%;
+    --surface: 152 6% 7%;
+    --surface-secondary: 152 5% 11%;
+    --surface-tertiary: 150 4% 15%;
   }
 }
 
@@ -93,42 +89,37 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-      Arial, sans-serif;
+    font-family: var(--font-body), system-ui, -apple-system, sans-serif;
     font-size: 1rem;
     line-height: 1.6;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
     background-image:
-      radial-gradient(circle at top left, hsla(var(--primary), 0.06), transparent 28%),
-      radial-gradient(circle at top right, hsla(var(--success), 0.06), transparent 24%);
+      radial-gradient(circle at top left, hsl(var(--primary) / 0.06), transparent 28%),
+      radial-gradient(circle at top right, hsl(var(--success) / 0.06), transparent 24%);
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-      Arial, sans-serif;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), var(--font-body), system-ui, sans-serif;
     font-weight: 600;
+    letter-spacing: -0.025em;
   }
 
-  .font-serif {
-    font-family: var(--font-inter), Georgia, "Times New Roman", Times, serif;
-  }
-
-  /* Use system fonts as fallbacks */
-  .font-geist {
-    font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-      Arial, sans-serif;
+  code, kbd, pre, samp, .font-mono {
+    font-family: var(--font-mono), ui-monospace, "Cascadia Code", "Fira Code", monospace;
   }
 
   ::selection {
-    background: hsla(var(--primary), 0.18);
+    background: hsl(var(--primary) / 0.18);
     color: hsl(var(--foreground));
+  }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .lucide {
@@ -150,40 +141,47 @@
     @apply h-6 w-6;
   }
 
-  .text-success {
-    color: hsl(var(--success));
+  .text-success { color: hsl(var(--success)); }
+  .text-error { color: hsl(var(--error)); }
+  .text-warning { color: hsl(var(--warning)); }
+  .text-info { color: hsl(var(--info)); }
+
+  .bg-success { background-color: hsl(var(--success)); }
+  .bg-error { background-color: hsl(var(--error)); }
+  .bg-warning { background-color: hsl(var(--warning)); }
+  .bg-info { background-color: hsl(var(--info)); }
+
+  .bg-surface { background-color: hsl(var(--surface)); }
+  .bg-surface-secondary { background-color: hsl(var(--surface-secondary)); }
+  .bg-surface-tertiary { background-color: hsl(var(--surface-tertiary)); }
+
+  .glow-error {
+    box-shadow: 0 0 12px -2px hsl(var(--error) / 0.3);
   }
-  .text-error {
-    color: hsl(var(--error));
+  .glow-warning {
+    box-shadow: 0 0 10px -2px hsl(var(--warning) / 0.25);
   }
-  .text-warning {
-    color: hsl(var(--warning));
+  .glow-success {
+    box-shadow: 0 0 10px -2px hsl(var(--success) / 0.25);
   }
-  .text-info {
-    color: hsl(var(--info));
+  .glow-primary {
+    box-shadow: 0 0 14px -3px hsl(var(--primary) / 0.3);
   }
 
-  .bg-success {
-    background-color: hsl(var(--success));
-  }
-  .bg-error {
-    background-color: hsl(var(--error));
-  }
-  .bg-warning {
-    background-color: hsl(var(--warning));
-  }
-  .bg-info {
-    background-color: hsl(var(--info));
-  }
+  .stagger-1 { animation-delay: 50ms; animation-fill-mode: backwards; }
+  .stagger-2 { animation-delay: 100ms; animation-fill-mode: backwards; }
+  .stagger-3 { animation-delay: 150ms; animation-fill-mode: backwards; }
+  .stagger-4 { animation-delay: 200ms; animation-fill-mode: backwards; }
+  .stagger-5 { animation-delay: 250ms; animation-fill-mode: backwards; }
 
-  .bg-surface {
-    background-color: hsl(var(--surface));
+  .severity-bar-error {
+    border-left: 3px solid hsl(var(--error));
   }
-  .bg-surface-secondary {
-    background-color: hsl(var(--surface-secondary));
+  .severity-bar-warning {
+    border-left: 3px solid hsl(var(--warning));
   }
-  .bg-surface-tertiary {
-    background-color: hsl(var(--surface-tertiary));
+  .severity-bar-info {
+    border-left: 3px solid hsl(var(--info));
   }
 }
 
@@ -211,4 +209,26 @@
 @keyframes shimmer-text {
   0%, 100% { background-position: 100% 50%; }
   50% { background-position: 0% 50%; }
+}
+
+@keyframes noise-drift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-2%, -1%); }
+  100% { transform: translate(0, 0); }
+}
+
+.noise-overlay::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 200px;
+  opacity: 0.018;
+  pointer-events: none;
+  z-index: 9999;
+  animation: noise-drift 8s ease-in-out infinite;
+}
+
+.dark .noise-overlay::after {
+  opacity: 0.03;
 }

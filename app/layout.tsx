@@ -1,24 +1,26 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Outfit, Sora, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 
-// Configure fonts properly
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-body",
 })
 
-// Use system fonts as fallback for Geist Sans and IBM Plex Serif
-const geistSans = {
-  variable: "--font-geist-sans",
-}
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["400", "500", "600", "700", "800"],
+})
 
-const ibmPlexSerif = {
-  variable: "--font-ibm-plex-serif",
-}
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  weight: ["400", "500", "600"],
+})
 
 export const metadata: Metadata = {
   title: "DeployZen - AI-Powered Testing and LLM Deployment",
@@ -39,13 +41,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
         <link rel="icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" type="image/png" />
         <link rel="shortcut icon" href="/Gemini_Generated_Image_l0hl0hl0hl0hl0hl.png" />
       </head>
-      <body className={`${inter.className} ${inter.variable} ${geistSans.variable} ${ibmPlexSerif.variable}`}>
+      <body className={`${outfit.className} ${outfit.variable} ${sora.variable} ${jetbrainsMono.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Toaster />

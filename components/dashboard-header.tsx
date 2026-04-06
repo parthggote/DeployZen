@@ -23,6 +23,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/upload-model": "Model Deployments",
   "/dashboard/monitoring": "Runtime Monitor",
   "/dashboard/kanban": "Release Board",
+  "/dashboard/repo-scan": "Repo Scanner",
 }
 
 /**
@@ -36,30 +37,17 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-4 px-4 py-3.5 md:px-6">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center gap-1.5 text-sm pl-10 lg:pl-0">
-          <Link href="/dashboard" className="text-muted-foreground transition-colors hover:text-foreground">
+        <nav className="flex items-center gap-1.5 text-sm pl-10 lg:pl-0" aria-label="Breadcrumb">
+          <Link href="/dashboard" className="font-display text-muted-foreground transition-colors hover:text-foreground">
             DeployZen
           </Link>
-          {isSubPage && (
-            <>
-              <ChevronRight className="icon-xs text-muted-foreground/60" />
-              <span className="font-medium text-foreground">{pageTitle}</span>
-            </>
-          )}
-          {!isSubPage && (
-            <>
-              <ChevronRight className="icon-xs text-muted-foreground/60" />
-              <span className="font-medium text-foreground">Home</span>
-            </>
-          )}
+          <ChevronRight className="icon-xs text-muted-foreground/60" />
+          <span className="font-medium text-foreground">
+            {isSubPage ? pageTitle : "Home"}
+          </span>
         </nav>
 
         <div className="flex items-center space-x-2 md:space-x-3">
-          <div className="hidden rounded-full border border-border/70 bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm md:inline-flex">
-            Live
-          </div>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <div>
@@ -69,50 +57,44 @@ export function DashboardHeader() {
             <TooltipContent>Switch appearance</TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="relative h-10 w-10 rounded-full border border-border/70 bg-surface shadow-sm ring-2 ring-transparent transition-all hover:ring-primary/20"
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src="/placeholder-user.jpg" alt="User" />
-                        <AvatarFallback className="bg-primary text-sm font-medium text-primary-foreground">
-                          DZ
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-64 rounded-2xl border-border/70 bg-surface shadow-xl" align="end" forceMount>
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">DeployZen Operator</p>
-                        <p className="text-xs leading-none text-muted-foreground">workspace@deployzen.app</p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
-                      <User className="icon-sm mr-2" />
-                      Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
-                      <Settings className="icon-sm mr-2" />
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-error transition-colors hover:bg-error/10">
-                      <LogOut className="icon-sm mr-2" />
-                      Log out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>Account menu</TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="relative h-10 w-10 rounded-full border border-border/70 bg-surface shadow-sm ring-2 ring-transparent transition-all hover:ring-primary/20"
+                aria-label="Account menu"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/placeholder-user.jpg" alt="User" />
+                  <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground font-display">
+                    DZ
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 rounded-2xl border-border/70 bg-surface shadow-xl" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none font-display">DeployZen Operator</p>
+                  <p className="text-xs leading-none text-muted-foreground">workspace@deployzen.app</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
+                <User className="icon-sm mr-2" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem className="transition-colors hover:bg-surface-secondary">
+                <Settings className="icon-sm mr-2" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-error transition-colors hover:bg-error/10">
+                <LogOut className="icon-sm mr-2" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

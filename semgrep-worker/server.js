@@ -168,6 +168,53 @@ function runProcess(command, args, options = {}) {
 }
 
 /**
+ * Strips Semgrep registry noise from a finding message (login prompts,
+ * "requires login" text, raw URLs to semgrep.dev, etc.)
+ * @param {string} raw - Raw message from Semgrep
+ * @returns {string} Cleaned message
+ */
+function cleanFindingMessage(raw) {
+  if (!raw) return "No description";
+  return raw
+    .replace(/\s*requires?\s+login\.?/gi, "")
+    .replace(/https?:\/\/semgrep\.dev\S*/g, "")
+    .replace(/\s*See\s+more\s+at\s*:?\s*$/i, "")
+    .replace(/\s*More\s+info\s*:?\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim() || "No description";
+}
+
+/**
+ * Extracts a useful reference URL from Semgrep metadata, preferring
+ * OWASP/CWE/open references over gated semgrep.dev links
+ * @param {object} metadata - Semgrep rule metadata
+ * @param {string} checkId - Rule check ID
+ * @returns {string|null} Best available reference URL
+ */
+function extractReferenceUrl(metadata, checkId) {
+  if (!metadata) return null;
+
+  const refs = metadata.references || [];
+  const openRef = refs.find((r) =>
+    r.includes("owasp.org") || r.includes("cwe.mitre.org") || r.includes("cheatsheetseries")
+  );
+  if (openRef) return openRef;
+
+  if (refs.length > 0) {
+    const nonSemgrep = refs.find((r) => !r.includes("semgrep.dev"));
+    if (nonSemgrep) return nonSemgrep;
+  }
+
+  const cwe = metadata.cwe || [];
+  if (cwe.length > 0) {
+    const match = String(cwe[0]).match(/CWE-(\d+)/i);
+    if (match) return `https://cwe.mitre.org/data/definitions/${match[1]}.html`;
+  }
+
+  return null;
+}
+
+/**
  * Parses raw Semgrep JSON output into structured findings
  * @param {object} raw - Raw Semgrep JSON output
  * @param {string} basePath - Base path to strip from file paths
@@ -179,12 +226,13 @@ function parseSemgrepOutput(raw, basePath) {
   return raw.results.map((r) => ({
     ruleId: r.check_id || "unknown",
     severity: mapSeverity(r.extra?.severity || "WARNING"),
-    message: r.extra?.message || "No description",
+    message: cleanFindingMessage(r.extra?.message),
     filePath: path.relative(basePath, r.path).replace(/\\/g, "/"),
     startLine: r.start?.line || 0,
     endLine: r.end?.line || 0,
     snippet: r.extra?.lines || "",
     category: extractCategory(r.check_id || ""),
+    referenceUrl: extractReferenceUrl(r.extra?.metadata, r.check_id),
   }));
 }
 

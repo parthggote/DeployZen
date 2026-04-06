@@ -127,7 +127,7 @@ export function DashboardSidebar() {
               />
               <span className={cn("absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background", healthBg)} />
             </div>
-            {!collapsed ? <span className="text-sm font-medium tracking-tight text-foreground/80">DeployZen</span> : null}
+            {!collapsed ? <span className="text-sm font-semibold tracking-tight text-foreground/80 font-display">DeployZen</span> : null}
           </div>
         </div>
 
@@ -150,20 +150,23 @@ export function DashboardSidebar() {
             return (
               <Tooltip key={item.name}>
                 <TooltipTrigger asChild>
-                  <Link href={item.href}>
+                  <Link href={item.href} aria-current={isActive ? "page" : undefined}>
                     <div
                       className={cn(
-                        "group relative flex items-center rounded-lg transition-all",
+                        "group relative flex items-center rounded-lg transition-all duration-200",
                         collapsed ? "justify-center px-1.5 py-2" : "gap-2.5 px-2.5 py-2",
                         isActive
                           ? "bg-primary/10 text-foreground"
                           : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                       )}
                     >
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
+                      )}
                       <div
                         className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-                          isActive ? "bg-primary text-primary-foreground" : "text-inherit",
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+                          isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-inherit",
                         )}
                       >
                         <item.icon className="h-3.5 w-3.5" />
@@ -172,9 +175,6 @@ export function DashboardSidebar() {
                         <p className={cn("truncate text-xs", isActive ? "font-medium" : "font-normal")}>
                           {item.name}
                         </p>
-                      )}
-                      {isActive && !collapsed && (
-                        <span className="absolute right-2 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-primary" />
                       )}
                     </div>
                   </Link>
@@ -221,13 +221,14 @@ export function DashboardSidebar() {
       </Button>
 
       {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
-          aria-hidden
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity duration-300",
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden
+      />
 
       {/* Mobile drawer */}
       <aside
