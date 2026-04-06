@@ -28,6 +28,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 
 import { RepoSelector } from "@/components/repo-selector"
 import { ScanHistoryList, type ScanRecord } from "@/components/scan-history-list"
@@ -223,7 +224,7 @@ export default function RepoScanPage() {
    */
   const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch("/api/repos")
+      const res = await fetchWithRetry("/api/repos", { retries: 2, timeoutMs: 15_000 })
       const data = await res.json()
       setGithubConnected(data.success === true)
     } catch {
@@ -239,7 +240,7 @@ export default function RepoScanPage() {
   const loadScans = useCallback(async () => {
     setScansLoading(true)
     try {
-      const res = await fetch("/api/scans")
+      const res = await fetchWithRetry("/api/scans", { retries: 2, timeoutMs: 15_000 })
       const data = await res.json()
       if (data.success) setScans(data.scans || [])
     } catch {
@@ -267,24 +268,31 @@ export default function RepoScanPage() {
   }, [closeStream])
 
   /**
-   * Starts a scan for the selected repository
+   * Starts a scan for the selected repository.
+   * Wakes the semgrep worker first so it is ready to pick up the job.
    */
   async function startScan() {
     if (!selectedRepo) return
 
     setScanning(true)
     setScanError(null)
-    setScanProgress({ stage: "Queued", percent: 2, updatedAt: new Date().toISOString() })
+    setScanProgress({ stage: "Waking scanner service\u2026", percent: 1, updatedAt: new Date().toISOString() })
     prevFindingCountRef.current = 0
 
+    fetch("/api/worker/wake").catch(() => {})
+
     try {
-      const res = await fetch("/api/scans", {
+      setScanProgress({ stage: "Queued", percent: 2, updatedAt: new Date().toISOString() })
+
+      const res = await fetchWithRetry("/api/scans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repoFullName: selectedRepo.fullName,
           branch: selectedRepo.defaultBranch,
         }),
+        retries: 2,
+        timeoutMs: 30_000,
       })
 
       const data = await res.json()
@@ -335,7 +343,7 @@ export default function RepoScanPage() {
     setSelectedFindingIndex(null)
 
     try {
-      const res = await fetch(`/api/scans/${scanId}`)
+      const res = await fetchWithRetry(`/api/scans/${scanId}`, { retries: 2, timeoutMs: 15_000 })
       const data = await res.json()
 
       if (data.success && data.scan) {

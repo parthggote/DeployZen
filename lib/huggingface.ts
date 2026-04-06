@@ -216,9 +216,9 @@ function formatInferenceBody(
   providerId: string,
   task: string
 ): string {
-  const chatTasks = ["text-generation", "conversational"]
+  const generationTasks = ["text-generation", "conversational", "text2text-generation"]
 
-  if (provider !== "hf-inference" && chatTasks.includes(task)) {
+  if (provider !== "hf-inference" && generationTasks.includes(task)) {
     return JSON.stringify({
       model: providerId,
       messages: [{ role: "user", content: String(inputs) }],
@@ -228,7 +228,11 @@ function formatInferenceBody(
     })
   }
 
-  return JSON.stringify({ inputs, parameters })
+  if (generationTasks.includes(task)) {
+    return JSON.stringify({ inputs, parameters })
+  }
+
+  return JSON.stringify({ inputs })
 }
 
 /**
@@ -374,30 +378,10 @@ export async function checkHuggingFaceModelStatus(
       }
     }
 
-    const url = buildInferenceUrl(availability.provider!, availability.providerId!, "text-generation")
-    const chatBody = availability.provider !== "hf-inference"
-      ? JSON.stringify({ model: availability.providerId, messages: [{ role: "user", content: "hi" }], max_tokens: 1 })
-      : JSON.stringify({ inputs: "test", parameters: { max_new_tokens: 1 } })
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: chatBody,
-    })
-
-    if (res.status === 503) {
-      const data = await res.json()
-      return { loaded: false, unsupported: false, estimatedTime: data.estimated_time || 30, provider: availability.provider! }
-    }
-
-    if (res.ok) {
-      return { loaded: true, unsupported: false, provider: availability.provider! }
-    }
-
-    return { loaded: false, unsupported: false, provider: availability.provider! }
+    // Provider is available — treat as ready. The actual model may cold-start
+    // on the first real inference call, but we don't need to probe it here
+    // since probing with wrong task params causes false negatives.
+    return { loaded: true, unsupported: false, provider: availability.provider! }
   } catch {
     return { loaded: false, unsupported: false }
   }

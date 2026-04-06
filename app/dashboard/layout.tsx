@@ -1,6 +1,7 @@
 import type React from "react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { DashboardHeader } from "@/components/dashboard-header"
+import { BackendWarmup } from "@/components/backend-warmup"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export default function DashboardLayout({
@@ -10,6 +11,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-surface-secondary/40 to-background">
+      <BackendWarmup />
       <TooltipProvider delayDuration={120}>
         <div className="flex min-h-screen">
           <DashboardSidebar />
