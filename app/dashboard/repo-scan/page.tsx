@@ -582,7 +582,7 @@ export default function RepoScanPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+      <div className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
         {/* Repo selector + Scan trigger */}
         <Card className="rounded-2xl border-border/60 animate-slide-up-fade stagger-2">
           <CardHeader className="pb-3">
