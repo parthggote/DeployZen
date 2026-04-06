@@ -103,7 +103,7 @@ export function RepoSelector({ onSelect, selectedRepo, listClassName }: RepoSele
 
       <div
         className={cn(
-          "h-[16rem] min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 sm:h-[18rem]",
+          "h-[16rem] min-h-0 flex-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-gutter:stable] sm:h-[18rem]",
           listClassName
         )}
       >

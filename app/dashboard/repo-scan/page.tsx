@@ -640,7 +640,7 @@ export default function RepoScanPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,25rem)] lg:items-start">
         {/* Repo selector + Scan trigger */}
-        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-2 lg:min-h-[calc(100svh-13rem)] lg:max-h-[calc(100svh-13rem)]">
+        <Card className="flex flex-col overflow-hidden rounded-2xl border-border/60 animate-slide-up-fade stagger-2 lg:min-h-[calc(100svh-13rem)] lg:max-h-[calc(100svh-13rem)]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
@@ -656,7 +656,7 @@ export default function RepoScanPage() {
                   <RepoSelector
                     onSelect={setSelectedRepo}
                     selectedRepo={selectedRepo}
-                    listClassName="h-[18rem] lg:h-full"
+                    listClassName="h-[18rem] lg:h-[calc(100svh-22rem)]"
                   />
                 </div>
 
@@ -706,7 +706,7 @@ export default function RepoScanPage() {
         </Card>
 
         {/* Scan history */}
-        <Card className="flex flex-col rounded-2xl border-border/60 animate-slide-up-fade stagger-4 lg:sticky lg:top-6 lg:max-h-[calc(100svh-13rem)]">
+        <Card className="flex flex-col overflow-hidden rounded-2xl border-border/60 animate-slide-up-fade stagger-4 lg:sticky lg:top-6 lg:max-h-[calc(100svh-13rem)]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-secondary">
@@ -722,7 +722,7 @@ export default function RepoScanPage() {
               selectedId={selectedScanId}
               onSelect={(id) => loadFullScan(id)}
               onDelete={deleteScan}
-              viewportClassName="h-[18rem] lg:h-full"
+              viewportClassName="h-[18rem] lg:h-[calc(100svh-19rem)]"
             />
           </CardContent>
         </Card>
