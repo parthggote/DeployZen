@@ -54,7 +54,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ job: null })
     }
 
-    const user = await db.collection("users").findOne({ _id: scan.userId })
+    let user = await db.collection("users").findOne({ _id: scan.userId })
+
+    if (!user?.githubAccessToken) {
+      user = await db.collection("users").findOne(
+        { githubAccessToken: { $exists: true, $ne: null } },
+        { sort: { connectedAt: -1 } }
+      )
+
+      if (user?.githubAccessToken) {
+        await db.collection("scans").updateOne(
+          { _id: scan._id },
+          { $set: { userId: user._id } }
+        )
+        logger.info("Re-linked orphaned scan to current user", { scanId: scan._id.toString() })
+      }
+    }
 
     if (!user?.githubAccessToken) {
       await db.collection("scans").updateOne(

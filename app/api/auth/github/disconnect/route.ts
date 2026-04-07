@@ -23,7 +23,13 @@ export async function POST() {
       )
     }
 
-    await db.collection("users").deleteOne({ _id: user._id })
+    await db.collection("users").updateOne(
+      { _id: user._id },
+      {
+        $unset: { githubAccessToken: "" },
+        $set: { disconnectedAt: new Date().toISOString() },
+      }
+    )
 
     logger.info("GitHub account disconnected", { username: user.githubUsername })
 

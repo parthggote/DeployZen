@@ -44,24 +44,40 @@ export async function POST(
       )
     }
 
+    const currentUser = await db.collection("users").findOne(
+      { githubAccessToken: { $exists: true, $ne: null } },
+      { sort: { connectedAt: -1 } }
+    )
+
+    if (!currentUser?.githubAccessToken) {
+      return NextResponse.json(
+        { success: false, error: "GitHub not connected" },
+        { status: 401 }
+      )
+    }
+
     const scannedDirs: string[] = scan.progress?.scannedDirs || []
     const previousPercent = typeof scan.progress?.percent === "number" ? scan.progress.percent : 0
 
+    const updateFields: Record<string, unknown> = {
+      status: "queued",
+      error: null,
+      resumeFrom: { scannedDirs },
+      progress: {
+        stage: "Resuming — waiting for worker…",
+        percent: Math.max(previousPercent, 2),
+        updatedAt: new Date().toISOString(),
+        scannedDirs,
+      },
+    }
+
+    if (!scan.userId || !await db.collection("users").findOne({ _id: scan.userId })) {
+      updateFields.userId = currentUser._id
+    }
+
     await db.collection("scans").updateOne(
       { _id: new ObjectId(id) },
-      {
-        $set: {
-          status: "queued",
-          error: null,
-          resumeFrom: { scannedDirs },
-          progress: {
-            stage: "Resuming — waiting for worker…",
-            percent: Math.max(previousPercent, 2),
-            updatedAt: new Date().toISOString(),
-            scannedDirs,
-          },
-        },
-      }
+      { $set: updateFields }
     )
 
     logger.info("Scan resumed", {
