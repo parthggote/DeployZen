@@ -147,11 +147,11 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <Button variant="ghost" className="hidden sm:inline-flex rounded-full" asChild>
-              <Link href="/login">Sign In</Link>
+              <Link href="/signin">Sign In</Link>
             </Button>
             <Button className="rounded-full px-5 shadow-sm" asChild>
-              <Link href="/dashboard">
-                Open Workspace
+              <Link href="/signup">
+                Get Started
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

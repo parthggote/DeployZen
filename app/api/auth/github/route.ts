@@ -1,28 +1,38 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import logger from "@/lib/logger"
 
 /**
- * Initiates the GitHub OAuth flow by redirecting to GitHub's authorization page
+ * Initiates the GitHub OAuth flow via Supabase
  * @returns {NextResponse} Redirect to GitHub OAuth
  */
 export async function GET() {
-  const clientId = process.env.GITHUB_CLIENT_ID
-  const redirectUri = process.env.GITHUB_REDIRECT_URI
+  try {
+    const supabase = await createClient()
+    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/github/callback`
 
-  if (!clientId || !redirectUri) {
-    logger.error("GitHub OAuth not configured", { clientId: !!clientId, redirectUri: !!redirectUri })
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: redirectUrl,
+        scopes: 'repo read:user',
+      },
+    })
+
+    if (error) {
+      logger.error("GitHub OAuth initiation failed", { error: error.message })
+      return NextResponse.json(
+        { success: false, error: "Failed to initiate GitHub OAuth" },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.redirect(data.url)
+  } catch (error: unknown) {
+    logger.error("GitHub OAuth error", { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { success: false, error: "GitHub OAuth not configured" },
       { status: 500 }
     )
   }
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: "repo read:user",
-    state: crypto.randomUUID(),
-  })
-
-  return NextResponse.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
 }

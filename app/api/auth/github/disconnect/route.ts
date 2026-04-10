@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import clientPromise from "@/lib/mongodb"
 import logger from "@/lib/logger"
 
@@ -8,30 +9,35 @@ import logger from "@/lib/logger"
  */
 export async function POST() {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      )
+    }
+
     const client = await clientPromise
     const db = client.db("DeployZen")
 
-    const user = await db.collection("users").findOne(
-      {},
-      { sort: { connectedAt: -1 } }
+    const result = await db.collection("users").updateOne(
+      { supabaseId: user.id },
+      {
+        $unset: { githubUsername: "", githubId: "", avatarUrl: "" },
+        $set: { disconnectedAt: new Date().toISOString() },
+      }
     )
 
-    if (!user) {
+    if (result.matchedCount === 0) {
       return NextResponse.json(
         { success: false, error: "No GitHub account connected" },
         { status: 404 }
       )
     }
 
-    await db.collection("users").updateOne(
-      { _id: user._id },
-      {
-        $unset: { githubAccessToken: "" },
-        $set: { disconnectedAt: new Date().toISOString() },
-      }
-    )
-
-    logger.info("GitHub account disconnected", { username: user.githubUsername })
+    logger.info("GitHub account disconnected", { userId: user.id })
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {

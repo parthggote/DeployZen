@@ -30,13 +30,19 @@ export default function Page() {
           AI-powered security scanning, automated testing, and intelligent deployment — all in one control center.
         </p>
 
-        <div className="flex justify-center animate-slide-up-fade stagger-4">
+        <div className="flex justify-center gap-4 animate-slide-up-fade stagger-4">
           <Link
-            href="/dashboard"
+            href="/signup"
             className="group relative inline-flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/10 px-8 py-4 text-base font-semibold text-white backdrop-blur-md transition-all duration-300 hover:bg-white/20 hover:border-white/25 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           >
             <span>Get Started</span>
             <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
+          </Link>
+          <Link
+            href="/signin"
+            className="group relative inline-flex items-center gap-2.5 rounded-2xl border border-white/25 bg-transparent px-8 py-4 text-base font-semibold text-white backdrop-blur-md transition-all duration-300 hover:bg-white/10 hover:border-white/35 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          >
+            <span>Sign In</span>
           </Link>
         </div>
       </section>
