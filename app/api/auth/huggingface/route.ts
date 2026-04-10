@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import logger from "@/lib/logger"
 
 /**
- * Initiates the Hugging Face OAuth flow by redirecting to HF's authorization page
+ * Initiates the Hugging Face OAuth flow (custom provider)
  * @returns {NextResponse} Redirect to HF OAuth
  */
 export async function GET() {
@@ -17,13 +18,31 @@ export async function GET() {
     )
   }
 
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: "openid profile inference-api",
-    response_type: "code",
-    state: crypto.randomUUID(),
-  })
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-  return NextResponse.redirect(`https://huggingface.co/oauth/authorize?${params.toString()}`)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "User must be authenticated first" },
+        { status: 401 }
+      )
+    }
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: "openid profile inference-api",
+      response_type: "code",
+      state: crypto.randomUUID(),
+    })
+
+    return NextResponse.redirect(`https://huggingface.co/oauth/authorize?${params.toString()}`)
+  } catch (error: unknown) {
+    logger.error("HF OAuth error", { error: error instanceof Error ? error.message : String(error) })
+    return NextResponse.json(
+      { success: false, error: "Failed to initiate HF OAuth" },
+      { status: 500 }
+    )
+  }
 }

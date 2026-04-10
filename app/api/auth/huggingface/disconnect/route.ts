@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import clientPromise from "@/lib/mongodb"
 import logger from "@/lib/logger"
 
@@ -8,11 +9,21 @@ import logger from "@/lib/logger"
  */
 export async function POST() {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      )
+    }
+
     const client = await clientPromise
     const db = client.db("DeployZen")
 
     const result = await db.collection("users").updateOne(
-      { hfAccessToken: { $exists: true } },
+      { supabaseId: user.id },
       { $unset: { hfUsername: "", hfAccessToken: "", hfConnectedAt: "" } }
     )
 
@@ -23,7 +34,7 @@ export async function POST() {
       )
     }
 
-    logger.info("Hugging Face account disconnected")
+    logger.info("Hugging Face account disconnected", { userId: user.id })
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"

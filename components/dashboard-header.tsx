@@ -1,8 +1,8 @@
 "use client"
 
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -31,8 +31,20 @@ const PAGE_TITLES: Record<string, string> = {
  */
 export function DashboardHeader() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user, signOut } = useAuth()
   const pageTitle = PAGE_TITLES[pathname] ?? "Dashboard"
   const isSubPage = pathname !== "/dashboard"
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/landing')
+  }
+
+  const userEmail = user?.email || "workspace@deployzen.app"
+  const userName = user?.user_metadata?.user_name || user?.user_metadata?.preferred_username || "DeployZen Operator"
+  const avatarUrl = user?.user_metadata?.avatar_url
+  const initials = userName.substring(0, 2).toUpperCase()
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
@@ -65,9 +77,9 @@ export function DashboardHeader() {
                 aria-label="Account menu"
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder-user.jpg" alt="User" />
+                  <AvatarImage src={avatarUrl || "/placeholder-user.jpg"} alt={userName} />
                   <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground font-display">
-                    DZ
+                    {initials}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -75,8 +87,8 @@ export function DashboardHeader() {
             <DropdownMenuContent className="w-64 rounded-2xl border-border/70 bg-surface shadow-xl" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none font-display">DeployZen Operator</p>
-                  <p className="text-xs leading-none text-muted-foreground">workspace@deployzen.app</p>
+                  <p className="text-sm font-medium leading-none font-display">{userName}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{userEmail}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -89,7 +101,7 @@ export function DashboardHeader() {
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled className="text-error transition-colors hover:bg-error/10 opacity-50 cursor-not-allowed">
+              <DropdownMenuItem onClick={handleSignOut} className="text-error transition-colors hover:bg-error/10">
                 <LogOut className="icon-sm mr-2" />
                 Log out
               </DropdownMenuItem>

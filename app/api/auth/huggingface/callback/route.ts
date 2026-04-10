@@ -67,6 +67,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const supabase = await (await import("@/lib/supabase/server")).createClient()
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+    if (!authUser) {
+      logger.warn("HF OAuth callback: user not authenticated")
+      return NextResponse.redirect(new URL("/dashboard/upload-model?hf_error=not_authenticated", req.url))
+    }
+
     const tokenData = await exchangeHFCode(code)
     const user = await getHFUser(tokenData.access_token)
 
@@ -74,7 +82,7 @@ export async function GET(req: NextRequest) {
     const db = client.db("DeployZen")
 
     await db.collection("users").updateOne(
-      { githubId: { $exists: true } },
+      { supabaseId: authUser.id },
       {
         $set: {
           hfUsername: user.name,
